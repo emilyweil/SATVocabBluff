@@ -1,0 +1,1128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vocab Bluff</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎭</text></svg>">
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Nunito', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #F7F7F7;
+      min-height: 100vh;
+      color: #3C3C3C;
+    }
+    .container { max-width: 500px; margin: 0 auto; padding: 16px; }
+    
+    /* Duolingo-style cards */
+    .card {
+      background: white;
+      border-radius: 16px;
+      border: 2px solid #E5E5E5;
+      padding: 24px;
+      margin-bottom: 16px;
+    }
+    
+    /* Primary button - Duolingo green with 3D effect */
+    .btn {
+      background: #58CC02;
+      color: white;
+      border: none;
+      padding: 14px 24px;
+      border-radius: 16px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      width: 100%;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      box-shadow: 0 4px 0 #46A302;
+      transition: all 0.1s;
+      position: relative;
+      top: 0;
+    }
+    .btn:hover { filter: brightness(1.05); }
+    .btn:active { 
+      box-shadow: 0 2px 0 #46A302;
+      top: 2px;
+    }
+    .btn:disabled { 
+      background: #E5E5E5; 
+      box-shadow: 0 4px 0 #CECECE;
+      color: #AFAFAF;
+      cursor: not-allowed; 
+    }
+    
+    /* Secondary button */
+    .btn-secondary {
+      background: white;
+      color: #1CB0F6;
+      border: 2px solid #E5E5E5;
+      box-shadow: 0 4px 0 #E5E5E5;
+    }
+    .btn-secondary:active {
+      box-shadow: 0 2px 0 #E5E5E5;
+    }
+    
+    /* Special buttons */
+    .btn-vote {
+      background: #CE82FF;
+      box-shadow: 0 4px 0 #A560CC;
+    }
+    .btn-vote:active { box-shadow: 0 2px 0 #A560CC; }
+    
+    .btn-results {
+      background: #FF9600;
+      box-shadow: 0 4px 0 #CC7800;
+    }
+    .btn-results:active { box-shadow: 0 2px 0 #CC7800; }
+    
+    .btn-small { padding: 12px 20px; font-size: 14px; width: auto; }
+    
+    /* Input fields */
+    .input {
+      width: 100%;
+      background: white;
+      border: 2px solid #E5E5E5;
+      border-radius: 16px;
+      padding: 14px 16px;
+      color: #3C3C3C;
+      font-size: 16px;
+      font-family: inherit;
+      margin-bottom: 12px;
+    }
+    .input:focus { 
+      outline: none; 
+      border-color: #1CB0F6;
+      box-shadow: 0 0 0 4px rgba(28, 176, 246, 0.2);
+    }
+    .input::placeholder { color: #AFAFAF; }
+    .textarea { min-height: 100px; resize: vertical; }
+    
+    /* Word display - big and bold */
+    .word-display {
+      font-size: 2.5rem;
+      font-weight: 800;
+      color: #58CC02;
+      text-align: center;
+      margin: 16px 0;
+      text-transform: capitalize;
+    }
+    
+    /* Tabs */
+    .tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+    .tab {
+      flex: 1;
+      padding: 12px;
+      border-radius: 12px;
+      border: 2px solid #E5E5E5;
+      background: white;
+      color: #AFAFAF;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 700;
+      transition: all 0.2s;
+    }
+    .tab.active { 
+      background: #DDF4FF; 
+      border-color: #1CB0F6;
+      color: #1CB0F6; 
+    }
+    
+    /* Definition cards for voting */
+    .def-card {
+      background: white;
+      border: 2px solid #E5E5E5;
+      border-radius: 16px;
+      padding: 16px;
+      margin-bottom: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .def-card:hover { 
+      border-color: #1CB0F6;
+      background: #F7FBFF;
+    }
+    .def-card.selected { 
+      border-color: #58CC02;
+      border-width: 3px;
+      background: #F0FDF0;
+    }
+    
+    /* Badges / Phase indicators */
+    .badge {
+      display: inline-block;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .badge-submit { background: #DDF4FF; color: #1CB0F6; }
+    .badge-vote { background: #F3E5FF; color: #CE82FF; }
+    .badge-results { background: #FFF3E0; color: #FF9600; }
+    
+    /* Leaderboard */
+    .lb-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      border-radius: 12px;
+      margin-bottom: 8px;
+      background: #F7F7F7;
+    }
+    .lb-row.me { background: #F0FDF0; border: 2px solid #58CC02; }
+    .lb-rank { font-size: 24px; margin-right: 12px; }
+    .lb-name { font-weight: 700; }
+    .lb-points { 
+      color: #FF9600; 
+      font-weight: 800; 
+      font-size: 18px;
+    }
+    .lb-stats { color: #AFAFAF; font-size: 12px; }
+    
+    /* Round items */
+    .round-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px;
+      background: white;
+      border: 2px solid #E5E5E5;
+      border-radius: 16px;
+      margin-bottom: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .round-item:hover { 
+      border-color: #58CC02;
+      transform: translateY(-2px);
+    }
+    .round-word { 
+      font-size: 1.25rem; 
+      font-weight: 700;
+      color: #3C3C3C;
+      text-transform: capitalize;
+    }
+    
+    /* Results cards */
+    .result-card { 
+      background: white;
+      border: 2px solid #E5E5E5;
+      border-radius: 16px; 
+      padding: 16px; 
+      margin-bottom: 12px; 
+    }
+    .result-card.truth { 
+      background: #F0FDF0; 
+      border-color: #58CC02;
+      border-width: 3px;
+    }
+    .result-author { 
+      font-size: 12px; 
+      color: #AFAFAF; 
+      margin-top: 8px;
+      font-weight: 600;
+    }
+    .result-truth-badge {
+      display: inline-block;
+      background: #58CC02;
+      color: white;
+      padding: 2px 8px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 700;
+      margin-left: 8px;
+    }
+    
+    /* Header */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 0;
+      margin-bottom: 16px;
+    }
+    .logo { display: flex; align-items: center; gap: 8px; }
+    .logo-icon { font-size: 32px; }
+    .logo-text {
+      font-size: 22px;
+      font-weight: 800;
+      color: #58CC02;
+    }
+    .user-info { 
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .username {
+      background: #F7F7F7;
+      padding: 8px 12px;
+      border-radius: 12px;
+      font-weight: 700;
+      color: #777;
+    }
+    .signout { 
+      background: none; 
+      border: none; 
+      color: #AFAFAF; 
+      cursor: pointer; 
+      font-weight: 600;
+    }
+    .signout:hover { color: #FF4B4B; }
+    
+    /* Back button */
+    .back-btn {
+      background: none;
+      border: none;
+      color: #1CB0F6;
+      cursor: pointer;
+      margin-bottom: 16px;
+      font-size: 15px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .back-btn:hover { text-decoration: underline; }
+    
+    /* How it works section */
+    .how-it-works { 
+      margin-top: 24px; 
+      padding-top: 20px; 
+      border-top: 2px solid #E5E5E5; 
+    }
+    .how-it-works h4 { 
+      color: #AFAFAF; 
+      font-size: 12px; 
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 16px; 
+    }
+    .step { 
+      display: flex; 
+      gap: 12px; 
+      color: #777; 
+      font-size: 14px; 
+      margin-bottom: 12px;
+      align-items: flex-start;
+    }
+    .step-num {
+      background: #58CC02;
+      color: white;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+    
+    /* Invite code display */
+    .invite-code {
+      font-family: 'Courier New', monospace;
+      background: #F7F7F7;
+      padding: 4px 10px;
+      border-radius: 8px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+    
+    /* Truth holder notice */
+    .truth-notice {
+      background: #F0FDF0;
+      border: 2px solid #58CC02;
+      border-radius: 12px;
+      padding: 12px 16px;
+      margin-top: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .truth-notice-icon { font-size: 24px; }
+    .truth-notice-text { font-weight: 600; color: #3C3C3C; }
+    
+    /* Real definition box */
+    .real-def-box {
+      background: #FFFBEB;
+      border: 2px dashed #FFD93D;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .real-def-label {
+      font-size: 12px;
+      font-weight: 700;
+      color: #B8860B;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    
+    /* Utilities */
+    .center { text-align: center; }
+    .mb-2 { margin-bottom: 8px; }
+    .mb-3 { margin-bottom: 12px; }
+    .mb-4 { margin-bottom: 16px; }
+    .mt-3 { margin-top: 12px; }
+    .mt-4 { margin-top: 16px; }
+    .text-muted { color: #AFAFAF; }
+    .text-small { font-size: 14px; }
+    .flex { display: flex; }
+    .gap-2 { gap: 8px; }
+    .gap-3 { gap: 12px; }
+    .flex-1 { flex: 1; }
+    
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+    }
+    .empty-icon { font-size: 64px; margin-bottom: 16px; }
+    .empty-title { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+    .empty-text { color: #AFAFAF; }
+    
+    /* Loading */
+    .loading { 
+      text-align: center; 
+      padding: 60px 20px;
+      font-weight: 700;
+      color: #AFAFAF;
+    }
+    .loading::after {
+      content: '';
+      animation: dots 1.5s infinite;
+    }
+    @keyframes dots {
+      0%, 20% { content: '.'; }
+      40% { content: '..'; }
+      60%, 100% { content: '...'; }
+    }
+    
+    /* Streak fire */
+    .streak {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: #FFF3E0;
+      padding: 6px 12px;
+      border-radius: 12px;
+    }
+    .streak-icon { font-size: 18px; }
+    .streak-num { font-weight: 800; color: #FF9600; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // ============================================
+    // CONFIGURATION - UPDATE THESE VALUES!
+    // ============================================
+    const SUPABASE_URL = 'https://azczbwojvdqmzufdyhbw.supabase.co';
+   const SUPABASE_ANON_KEY = 'eyJhbGc...your-actual-key';
+    // ============================================
+
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // ============================================
+    // MAIN APP
+    // ============================================
+    function App() {
+      const [user, setUser] = useState(null);
+      const [profile, setProfile] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const [view, setView] = useState('groups');
+      const [activeGroup, setActiveGroup] = useState(null);
+      const [activeRound, setActiveRound] = useState(null);
+
+      useEffect(() => {
+        checkUser();
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+          setUser(session?.user ?? null);
+          if (session?.user) loadProfile(session.user.id);
+          else setProfile(null);
+        });
+        return () => subscription.unsubscribe();
+      }, []);
+
+      const checkUser = async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        setUser(user);
+        if (user) await loadProfile(user.id);
+        setLoading(false);
+      };
+
+      const loadProfile = async (userId) => {
+        const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();
+        setProfile(data);
+      };
+
+      const signOut = async () => {
+        await supabase.auth.signOut();
+        setView('groups');
+        setActiveGroup(null);
+        setActiveRound(null);
+      };
+
+      if (loading) return <div className="container"><div className="loading">Loading</div></div>;
+      if (!user) return <Auth />;
+
+      return (
+        <div className="container">
+          <header className="header">
+            <div className="logo">
+              <span className="logo-icon">🎭</span>
+              <span className="logo-text">Vocab Bluff</span>
+            </div>
+            <div className="user-info">
+              <span className="username">@{profile?.username}</span>
+              <button className="signout" onClick={signOut}>Sign out</button>
+            </div>
+          </header>
+
+          {view === 'round' && activeRound && (
+            <>
+              <button className="back-btn" onClick={() => setView('group')}>
+                ← Back to {activeGroup?.name}
+              </button>
+              <GameRound 
+                round={activeRound} 
+                userId={user.id} 
+                onBack={() => setView('group')}
+                onUpdate={(r) => setActiveRound(r)}
+              />
+            </>
+          )}
+
+          {view === 'group' && activeGroup && (
+            <>
+              <button className="back-btn" onClick={() => setView('groups')}>
+                ← All Groups
+              </button>
+              <GroupDetail 
+                group={activeGroup} 
+                userId={user.id}
+                onSelectRound={(r) => { setActiveRound(r); setView('round'); }}
+              />
+            </>
+          )}
+
+          {view === 'groups' && (
+            <GroupList 
+              userId={user.id}
+              onSelectGroup={(g) => { setActiveGroup(g); setView('group'); }}
+            />
+          )}
+        </div>
+      );
+    }
+
+    // ============================================
+    // AUTH COMPONENT
+    // ============================================
+    function Auth() {
+      const [mode, setMode] = useState('signin');
+      const [email, setEmail] = useState('');
+      const [password, setPassword] = useState('');
+      const [username, setUsername] = useState('');
+      const [loading, setLoading] = useState(false);
+      const [error, setError] = useState(null);
+      const [message, setMessage] = useState(null);
+
+      const handleSubmit = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        setError(null);
+        setMessage(null);
+
+        if (mode === 'signup') {
+          const { error } = await supabase.auth.signUp({
+            email,
+            password,
+            options: { data: { username } }
+          });
+          if (error) setError(error.message);
+          else setMessage('Check your email to confirm your account!');
+        } else {
+          const { error } = await supabase.auth.signInWithPassword({ email, password });
+          if (error) setError(error.message);
+        }
+        setLoading(false);
+      };
+
+      return (
+        <div className="container" style={{ paddingTop: '40px' }}>
+          <div className="card">
+            <div className="center mb-4">
+              <div style={{ fontSize: '72px', marginBottom: '8px' }}>🎭</div>
+              <h1 style={{ fontSize: '28px', fontWeight: '800', color: '#58CC02', marginBottom: '8px' }}>
+                Vocab Bluff
+              </h1>
+              <p className="text-muted">Learn SAT words by fooling your friends!</p>
+            </div>
+
+            <div className="tabs">
+              <button className={`tab ${mode === 'signin' ? 'active' : ''}`} onClick={() => setMode('signin')}>
+                Sign In
+              </button>
+              <button className={`tab ${mode === 'signup' ? 'active' : ''}`} onClick={() => setMode('signup')}>
+                Sign Up
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit}>
+              {mode === 'signup' && (
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="Username"
+                  className="input"
+                  required
+                />
+              )}
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Email"
+                className="input"
+                required
+              />
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Password"
+                className="input"
+                required
+                minLength={6}
+              />
+              {error && <p style={{ color: '#FF4B4B', marginBottom: '12px', fontSize: '14px', fontWeight: '600' }}>{error}</p>}
+              {message && <p style={{ color: '#58CC02', marginBottom: '12px', fontSize: '14px', fontWeight: '600' }}>{message}</p>}
+              <button type="submit" className="btn" disabled={loading}>
+                {loading ? 'Loading...' : mode === 'signin' ? 'Sign In' : 'Create Account'}
+              </button>
+            </form>
+
+            <div className="how-it-works">
+              <h4>How It Works</h4>
+              <div className="step">
+                <span className="step-num">1</span>
+                <span>Join a group with friends</span>
+              </div>
+              <div className="step">
+                <span className="step-num">2</span>
+                <span>One person gets the real definition, everyone else makes up fakes</span>
+              </div>
+              <div className="step">
+                <span className="step-num">3</span>
+                <span>Vote on which definition is real</span>
+              </div>
+              <div className="step">
+                <span className="step-num">4</span>
+                <span>Score points for fooling friends or guessing right!</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ============================================
+    // GROUP LIST
+    // ============================================
+    function GroupList({ userId, onSelectGroup }) {
+      const [groups, setGroups] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [showCreate, setShowCreate] = useState(false);
+      const [showJoin, setShowJoin] = useState(false);
+      const [newName, setNewName] = useState('');
+      const [joinCode, setJoinCode] = useState('');
+      const [error, setError] = useState(null);
+
+      useEffect(() => { loadGroups(); }, []);
+
+      const loadGroups = async () => {
+        const { data } = await supabase
+          .from('group_members')
+          .select('groups(*)')
+          .eq('user_id', userId);
+        setGroups(data?.map(d => d.groups).filter(Boolean) || []);
+        setLoading(false);
+      };
+
+      const createGroup = async (e) => {
+        e.preventDefault();
+        setError(null);
+        const { data: group, error: err } = await supabase
+          .from('groups')
+          .insert({ name: newName.trim(), created_by: userId })
+          .select()
+          .single();
+        if (err) { setError(err.message); return; }
+        await supabase.from('group_members').insert({ group_id: group.id, user_id: userId });
+        await supabase.from('scores').insert({ group_id: group.id, user_id: userId });
+        setNewName('');
+        setShowCreate(false);
+        loadGroups();
+      };
+
+      const joinGroup = async (e) => {
+        e.preventDefault();
+        setError(null);
+        const { data: group } = await supabase
+          .from('groups')
+          .select()
+          .eq('invite_code', joinCode.trim().toLowerCase())
+          .single();
+        if (!group) { setError('Group not found. Check the code!'); return; }
+        const { data: existing } = await supabase
+          .from('group_members')
+          .select()
+          .eq('group_id', group.id)
+          .eq('user_id', userId)
+          .single();
+        if (existing) { setError("You're already in this group!"); return; }
+        await supabase.from('group_members').insert({ group_id: group.id, user_id: userId });
+        await supabase.from('scores').insert({ group_id: group.id, user_id: userId });
+        setJoinCode('');
+        setShowJoin(false);
+        loadGroups();
+      };
+
+      if (loading) return <div className="loading">Loading groups</div>;
+
+      return (
+        <div>
+          <div className="center mb-4">
+            <h2 style={{ fontSize: '24px', fontWeight: '800' }}>Your Groups</h2>
+            <p className="text-muted">Play Vocab Bluff with friends</p>
+          </div>
+
+          <div className="flex gap-2 mb-4">
+            <button className="btn btn-small flex-1" onClick={() => { setShowCreate(true); setShowJoin(false); setError(null); }}>
+              ➕ Create Group
+            </button>
+            <button className="btn btn-secondary btn-small flex-1" onClick={() => { setShowJoin(true); setShowCreate(false); setError(null); }}>
+              🔗 Join Group
+            </button>
+          </div>
+
+          {showCreate && (
+            <form onSubmit={createGroup} className="card">
+              <h3 className="mb-3" style={{ fontWeight: '700' }}>Create a New Group</h3>
+              <input 
+                value={newName} 
+                onChange={(e) => setNewName(e.target.value)} 
+                placeholder="Group name (e.g., SAT Squad)" 
+                className="input" 
+                autoFocus 
+              />
+              {error && <p style={{ color: '#FF4B4B', fontSize: '14px', marginBottom: '12px' }}>{error}</p>}
+              <div className="flex gap-2">
+                <button type="submit" className="btn btn-small flex-1">Create</button>
+                <button type="button" className="btn btn-secondary btn-small" onClick={() => setShowCreate(false)}>Cancel</button>
+              </div>
+            </form>
+          )}
+
+          {showJoin && (
+            <form onSubmit={joinGroup} className="card">
+              <h3 className="mb-3" style={{ fontWeight: '700' }}>Join a Group</h3>
+              <input 
+                value={joinCode} 
+                onChange={(e) => setJoinCode(e.target.value)} 
+                placeholder="Enter invite code" 
+                className="input" 
+                style={{ fontFamily: 'monospace', textAlign: 'center', fontSize: '24px', letterSpacing: '4px', textTransform: 'uppercase' }} 
+                maxLength={6} 
+                autoFocus 
+              />
+              {error && <p style={{ color: '#FF4B4B', fontSize: '14px', marginBottom: '12px' }}>{error}</p>}
+              <div className="flex gap-2">
+                <button type="submit" className="btn btn-small flex-1">Join</button>
+                <button type="button" className="btn btn-secondary btn-small" onClick={() => setShowJoin(false)}>Cancel</button>
+              </div>
+            </form>
+          )}
+
+          {groups.length === 0 ? (
+            <div className="card empty-state">
+              <div className="empty-icon">🎭</div>
+              <div className="empty-title">No groups yet!</div>
+              <div className="empty-text">Create a group and invite friends to play.</div>
+            </div>
+          ) : (
+            groups.map(group => (
+              <div key={group.id} className="round-item" onClick={() => onSelectGroup(group)}>
+                <div>
+                  <div className="round-word">{group.name}</div>
+                  <div className="text-small text-muted">
+                    Code: <span className="invite-code">{group.invite_code}</span>
+                  </div>
+                </div>
+                <span style={{ fontSize: '24px' }}>→</span>
+              </div>
+            ))
+          )}
+        </div>
+      );
+    }
+
+    // ============================================
+    // GROUP DETAIL
+    // ============================================
+    function GroupDetail({ group, userId, onSelectRound }) {
+      const [rounds, setRounds] = useState([]);
+      const [scores, setScores] = useState([]);
+      const [members, setMembers] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [creating, setCreating] = useState(false);
+
+      useEffect(() => { loadData(); }, [group.id]);
+
+      const loadData = async () => {
+        const [roundsRes, scoresRes, membersRes] = await Promise.all([
+          supabase.from('rounds').select('*, words(*)').eq('group_id', group.id).order('created_at', { ascending: false }).limit(10),
+          supabase.from('scores').select('*, profiles(*)').eq('group_id', group.id).order('total_points', { ascending: false }),
+          supabase.from('group_members').select('*, profiles(*)').eq('group_id', group.id)
+        ]);
+        setRounds(roundsRes.data || []);
+        setScores(scoresRes.data || []);
+        setMembers(membersRes.data || []);
+        setLoading(false);
+      };
+
+      const startRound = async () => {
+        setCreating(true);
+        const { data: words } = await supabase.from('words').select('id');
+        const usedWordIds = rounds.slice(0, 10).map(r => r.word_id);
+        const availableWords = words.filter(w => !usedWordIds.includes(w.id));
+        const randomWord = availableWords.length > 0 
+          ? availableWords[Math.floor(Math.random() * availableWords.length)]
+          : words[Math.floor(Math.random() * words.length)];
+        
+        const randomMember = members[Math.floor(Math.random() * members.length)];
+        
+        await supabase.from('rounds').insert({
+          group_id: group.id,
+          word_id: randomWord.id,
+          truth_holder_id: randomMember.user_id,
+          phase: 'submitting'
+        });
+        
+        await loadData();
+        setCreating(false);
+      };
+
+      const getPhaseInfo = (phase) => {
+        if (phase === 'submitting') return { label: '✍️ Submit', class: 'badge-submit' };
+        if (phase === 'voting') return { label: '🗳️ Vote', class: 'badge-vote' };
+        return { label: '🏆 Results', class: 'badge-results' };
+      };
+
+      if (loading) return <div className="loading">Loading</div>;
+
+      return (
+        <div>
+          <div className="card center">
+            <h2 style={{ fontSize: '28px', fontWeight: '800', marginBottom: '8px' }}>{group.name}</h2>
+            <p className="text-muted mb-3">
+              {members.length} player{members.length !== 1 ? 's' : ''} • 
+              Code: <span className="invite-code">{group.invite_code}</span>
+            </p>
+            <button className="btn" onClick={startRound} disabled={creating}>
+              {creating ? 'Starting...' : '🎲 Start New Round'}
+            </button>
+          </div>
+
+          <h3 style={{ fontWeight: '700', marginBottom: '12px', marginTop: '24px' }}>📚 Recent Rounds</h3>
+          {rounds.length === 0 ? (
+            <div className="card center">
+              <p className="text-muted">No rounds yet. Start one!</p>
+            </div>
+          ) : (
+            rounds.map(round => {
+              const phaseInfo = getPhaseInfo(round.phase);
+              return (
+                <div key={round.id} className="round-item" onClick={() => onSelectRound(round)}>
+                  <span className="round-word">{round.words?.word}</span>
+                  <span className={`badge ${phaseInfo.class}`}>{phaseInfo.label}</span>
+                </div>
+              );
+            })
+          )}
+
+          <h3 style={{ fontWeight: '700', marginBottom: '12px', marginTop: '24px' }}>🏆 Leaderboard</h3>
+          {scores.length === 0 ? (
+            <div className="card center">
+              <p className="text-muted">Play rounds to earn points!</p>
+            </div>
+          ) : (
+            scores.map((score, i) => (
+              <div key={score.id} className={`lb-row ${score.user_id === userId ? 'me' : ''}`}>
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <span className="lb-rank">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i+1}`}</span>
+                  <span className="lb-name">@{score.profiles?.username}</span>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div className="lb-points">{score.total_points} pts</div>
+                  <div className="lb-stats">{score.fools} 🎭 fooled • {score.correct_guesses} ✓ correct</div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      );
+    }
+
+    // ============================================
+    // GAME ROUND
+    // ============================================
+    function GameRound({ round, userId, onBack, onUpdate }) {
+      const [word, setWord] = useState(null);
+      const [submissions, setSubmissions] = useState([]);
+      const [mySubmission, setMySubmission] = useState(null);
+      const [myVote, setMyVote] = useState(null);
+      const [definition, setDefinition] = useState('');
+      const [selectedSubmission, setSelectedSubmission] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const [submitting, setSubmitting] = useState(false);
+
+      const isTruthHolder = round.truth_holder_id === userId;
+
+      useEffect(() => { loadRound(); }, [round.id]);
+
+      const loadRound = async () => {
+        const [wordRes, subsRes, voteRes] = await Promise.all([
+          supabase.from('words').select('*').eq('id', round.word_id).single(),
+          supabase.from('submissions').select('*, profiles(*)').eq('round_id', round.id),
+          supabase.from('votes').select('*').eq('round_id', round.id).eq('voter_id', userId).single()
+        ]);
+        setWord(wordRes.data);
+        setSubmissions(subsRes.data || []);
+        setMySubmission(subsRes.data?.find(s => s.user_id === userId));
+        setMyVote(voteRes.data);
+        setLoading(false);
+      };
+
+      const submitDefinition = async () => {
+        setSubmitting(true);
+        await supabase.from('submissions').insert({
+          round_id: round.id,
+          user_id: userId,
+          definition: definition.trim(),
+          is_truth: isTruthHolder
+        });
+        setDefinition('');
+        await loadRound();
+        setSubmitting(false);
+      };
+
+      const advanceToVoting = async () => {
+        await supabase.from('rounds').update({ phase: 'voting' }).eq('id', round.id);
+        onUpdate({ ...round, phase: 'voting' });
+      };
+
+      const submitVote = async () => {
+        if (!selectedSubmission) return;
+        setSubmitting(true);
+        await supabase.from('votes').insert({
+          round_id: round.id,
+          voter_id: userId,
+          submission_id: selectedSubmission
+        });
+        await loadRound();
+        setSubmitting(false);
+      };
+
+      const advanceToResults = async () => {
+        const truthSub = submissions.find(s => s.is_truth);
+        const { data: allVotes } = await supabase.from('votes').select('*').eq('round_id', round.id);
+        const { data: roundData } = await supabase.from('rounds').select('group_id').eq('id', round.id).single();
+        
+        for (const sub of submissions) {
+          if (sub.is_truth) continue;
+          const foolCount = allVotes?.filter(v => v.submission_id === sub.id).length || 0;
+          if (foolCount > 0) {
+            const { data: existing } = await supabase.from('scores').select('*').eq('group_id', roundData.group_id).eq('user_id', sub.user_id).single();
+            if (existing) {
+              await supabase.from('scores').update({
+                total_points: existing.total_points + foolCount * 2,
+                fools: existing.fools + foolCount
+              }).eq('id', existing.id);
+            }
+          }
+        }
+
+        if (truthSub) {
+          const correctVoters = allVotes?.filter(v => v.submission_id === truthSub.id) || [];
+          for (const vote of correctVoters) {
+            const { data: existing } = await supabase.from('scores').select('*').eq('group_id', roundData.group_id).eq('user_id', vote.voter_id).single();
+            if (existing) {
+              await supabase.from('scores').update({
+                total_points: existing.total_points + 1,
+                correct_guesses: existing.correct_guesses + 1
+              }).eq('id', existing.id);
+            }
+          }
+        }
+
+        await supabase.from('rounds').update({ phase: 'results' }).eq('id', round.id);
+        onUpdate({ ...round, phase: 'results' });
+      };
+
+      if (loading) return <div className="loading">Loading round</div>;
+
+      // SUBMITTING PHASE
+      if (round.phase === 'submitting') {
+        return (
+          <div>
+            <div className="card center">
+              <p className="text-muted mb-2" style={{ fontWeight: '600' }}>Today's word:</p>
+              <div className="word-display">{word?.word}</div>
+              {isTruthHolder && (
+                <div className="truth-notice">
+                  <span className="truth-notice-icon">🎯</span>
+                  <span className="truth-notice-text">You have the real definition! Rewrite it in your own words.</span>
+                </div>
+              )}
+            </div>
+
+            {isTruthHolder && (
+              <div className="real-def-box">
+                <div className="real-def-label">📖 Real Definition (rewrite this)</div>
+                <p style={{ fontStyle: 'italic', color: '#3C3C3C' }}>{word?.definition}</p>
+              </div>
+            )}
+
+            {mySubmission ? (
+              <div className="card">
+                <p className="text-muted mb-2" style={{ fontWeight: '600' }}>Your submission:</p>
+                <p style={{ fontSize: '16px', lineHeight: '1.5' }}>{mySubmission.definition}</p>
+                <p className="text-muted text-small mt-4">⏳ Waiting for others... ({submissions.length} submitted)</p>
+                {submissions.length >= 2 && (
+                  <button className="btn btn-vote mt-4" onClick={advanceToVoting}>
+                    Start Voting →
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="card">
+                <p className="mb-3" style={{ fontWeight: '600' }}>
+                  {isTruthHolder ? '✍️ Rewrite the definition:' : '🎭 Make up a convincing fake definition:'}
+                </p>
+                <textarea
+                  className="input textarea"
+                  value={definition}
+                  onChange={(e) => setDefinition(e.target.value)}
+                  placeholder={isTruthHolder ? "Type the real definition in your own words..." : "Write a fake definition that sounds real..."}
+                />
+                <button className="btn" onClick={submitDefinition} disabled={submitting || !definition.trim()}>
+                  {submitting ? 'Submitting...' : 'Submit Definition'}
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      }
+
+      // VOTING PHASE
+      if (round.phase === 'voting') {
+        const shuffled = [...submissions].sort(() => Math.random() - 0.5);
+        
+        return (
+          <div>
+            <div className="card center">
+              <p className="text-muted mb-2" style={{ fontWeight: '600' }}>Vote for the REAL definition of:</p>
+              <div className="word-display">{word?.word}</div>
+            </div>
+
+            {myVote ? (
+              <div className="card center">
+                <p style={{ fontWeight: '600', marginBottom: '12px' }}>✅ You've voted!</p>
+                <p className="text-muted mb-4">Waiting for others to finish voting...</p>
+                <button className="btn btn-results" onClick={advanceToResults}>
+                  See Results →
+                </button>
+              </div>
+            ) : mySubmission ? (
+              <div>
+                <p className="mb-3" style={{ fontWeight: '600' }}>Which definition is the real one?</p>
+                {shuffled.filter(s => s.user_id !== userId).map(sub => (
+                  <div
+                    key={sub.id}
+                    className={`def-card ${selectedSubmission === sub.id ? 'selected' : ''}`}
+                    onClick={() => setSelectedSubmission(sub.id)}
+                  >
+                    {sub.definition}
+                  </div>
+                ))}
+                <button className="btn btn-vote mt-3" onClick={submitVote} disabled={submitting || !selectedSubmission}>
+                  {submitting ? 'Voting...' : 'Submit Vote'}
+                </button>
+              </div>
+            ) : (
+              <div className="card center">
+                <p className="text-muted">You didn't submit a definition for this round.</p>
+              </div>
+            )}
+          </div>
+        );
+      }
+
+      // RESULTS PHASE
+      const truthSub = submissions.find(s => s.is_truth);
+      
+      return (
+        <div>
+          <div className="card center">
+            <div className="word-display">{word?.word}</div>
+            <p style={{ marginTop: '8px', fontSize: '18px', lineHeight: '1.5' }}>{word?.definition}</p>
+            {word?.example_sentence && (
+              <p className="text-muted text-small mt-3" style={{ fontStyle: 'italic' }}>
+                "{word.example_sentence}"
+              </p>
+            )}
+          </div>
+
+          <h3 style={{ fontWeight: '700', marginBottom: '12px' }}>📊 Results</h3>
+          {submissions.map(sub => (
+            <div key={sub.id} className={`result-card ${sub.is_truth ? 'truth' : ''}`}>
+              <p style={{ lineHeight: '1.5' }}>{sub.definition}</p>
+              <p className="result-author">
+                — @{sub.profiles?.username}
+                {sub.is_truth && <span className="result-truth-badge">✓ THE TRUTH</span>}
+              </p>
+            </div>
+          ))}
+
+          <button className="btn btn-secondary mt-4" onClick={onBack}>
+            ← Back to Group
+          </button>
+        </div>
+      );
+    }
+
+    // ============================================
+    // RENDER
+    // ============================================
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
