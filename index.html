@@ -80,10 +80,9 @@
     // ============================================
     // CONFIGURATION - UPDATE THESE VALUES!
     // ============================================
-
     const SUPABASE_URL = 'https://azczbwojvdqmzufdyhbw.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF6Y3pid29qdmRxbXp1ZmR5aGJ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyMzYxMDksImV4cCI6MjA5NzgxMjEwOX0.x-6cdRcLH71_Had2SGlcAbwT_oJ9MXVAiv0JwGLqJ08';
-    
+
     // ============================================
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -171,24 +170,38 @@
       const [username, setUsername] = useState('');
       const [loading, setLoading] = useState(false);
       const [error, setError] = useState(null);
-      const [message, setMessage] = useState(null);
+      const [confirmationSent, setConfirmationSent] = useState(false);
 
       const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
         setError(null);
-        setMessage(null);
 
         if (mode === 'signup') {
           const { error } = await supabase.auth.signUp({ email, password, options: { data: { username } } });
           if (error) setError(error.message);
-          else setMessage('Check your email to confirm!');
+          else setConfirmationSent(true);
         } else {
           const { error } = await supabase.auth.signInWithPassword({ email, password });
           if (error) setError(error.message);
         }
         setLoading(false);
       };
+
+      // Show only confirmation message after signup
+      if (confirmationSent) {
+        return html`
+          <div class="container" style="padding-top: 60px;">
+            <div class="card center">
+              <div style="font-size: 72px; margin-bottom: 16px;">📬</div>
+              <h2 style="font-size: 24px; font-weight: 800; margin-bottom: 12px;">Check your email!</h2>
+              <p style="color: #666; line-height: 1.6;">We sent a confirmation link to <strong>${email}</strong></p>
+              <p style="color: #666; line-height: 1.6; margin-top: 8px;">Click the link in the email to activate your account.</p>
+              <button class="btn btn-secondary mt-4" onClick=${() => { setConfirmationSent(false); setMode('signin'); }}>← Back to Sign In</button>
+            </div>
+          </div>
+        `;
+      }
 
       return html`
         <div class="container" style="padding-top: 40px;">
@@ -207,7 +220,6 @@
               <input class="input" type="email" placeholder="Email" value=${email} onInput=${(e) => setEmail(e.target.value)} required />
               <input class="input" type="password" placeholder="Password" value=${password} onInput=${(e) => setPassword(e.target.value)} required minLength="6" />
               ${error && html`<p style="color: #FF4B4B; margin-bottom: 12px;">${error}</p>`}
-              ${message && html`<p style="color: #58CC02; margin-bottom: 12px;">${message}</p>`}
               <button class="btn" type="submit" disabled=${loading}>${loading ? 'Loading...' : mode === 'signin' ? 'Sign In' : 'Create Account'}</button>
             </form>
             <div style="margin-top: 24px; padding-top: 20px; border-top: 2px solid #E5E5E5;">
