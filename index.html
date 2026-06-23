@@ -408,8 +408,7 @@
       const [selected, setSelected] = useState(null);
       const [loading, setLoading] = useState(true);
       const [submitting, setSubmitting] = useState(false);
-
-      const isTruth = round.truth_holder_id === userId;
+      const [shuffledOptions, setShuffledOptions] = useState([]);
 
       useEffect(() => { loadRound(); }, [round.id]);
 
@@ -419,12 +418,26 @@
           supabase.from('submissions').select('*, profiles(*)').eq('round_id', round.id),
           supabase.from('votes').select('*').eq('round_id', round.id).eq('voter_id', userId).single()
         ]);
-        setWord(w.data); setSubmissions(s.data || []); setMySubmission(s.data?.find(x => x.user_id === userId)); setMyVote(v.data); setLoading(false);
+        setWord(w.data);
+        setSubmissions(s.data || []);
+        setMySubmission(s.data?.find(x => x.user_id === userId));
+        setMyVote(v.data);
+        
+        // Create shuffled options: all submissions + the real definition
+        if (w.data && s.data) {
+          const options = [
+            ...s.data.map(sub => ({ id: sub.id, definition: sub.definition, isReal: false, userId: sub.user_id, username: sub.profiles?.username })),
+            { id: 'real', definition: w.data.definition, isReal: true, userId: null, username: null }
+          ].sort(() => Math.random() - 0.5);
+          setShuffledOptions(options);
+        }
+        
+        setLoading(false);
       };
 
       const submitDef = async () => {
         setSubmitting(true);
-        await supabase.from('submissions').insert({ round_id: round.id, user_id: userId, definition: definition.trim(), is_truth: isTruth });
+        await supabase.from('submissions').insert({ round_id: round.id, user_id: userId, definition: definition.trim(), is_truth: false });
         setDefinition(''); await loadRound(); setSubmitting(false);
       };
 
@@ -433,28 +446,31 @@
       const submitVote = async () => {
         if (!selected) return;
         setSubmitting(true);
-        await supabase.from('votes').insert({ round_id: round.id, voter_id: userId, submission_id: selected });
+        // Store the selected id (could be 'real' or a submission id)
+        await supabase.from('votes').insert({ round_id: round.id, voter_id: userId, submission_id: selected === 'real' ? null : selected });
         await loadRound(); setSubmitting(false);
       };
 
       const toResults = async () => {
-        const truth = submissions.find(s => s.is_truth);
         const { data: votes } = await supabase.from('votes').select('*').eq('round_id', round.id);
         const { data: rd } = await supabase.from('rounds').select('group_id').eq('id', round.id).single();
+        
+        // Award points for fooling others (votes on fake submissions)
         for (const sub of submissions) {
-          if (sub.is_truth) continue;
           const fools = votes?.filter(v => v.submission_id === sub.id).length || 0;
           if (fools > 0) {
             const { data: sc } = await supabase.from('scores').select('*').eq('group_id', rd.group_id).eq('user_id', sub.user_id).single();
             if (sc) await supabase.from('scores').update({ total_points: sc.total_points + fools * 2, fools: sc.fools + fools }).eq('id', sc.id);
           }
         }
-        if (truth) {
-          for (const v of votes?.filter(x => x.submission_id === truth.id) || []) {
-            const { data: sc } = await supabase.from('scores').select('*').eq('group_id', rd.group_id).eq('user_id', v.voter_id).single();
-            if (sc) await supabase.from('scores').update({ total_points: sc.total_points + 1, correct_guesses: sc.correct_guesses + 1 }).eq('id', sc.id);
-          }
+        
+        // Award points for correct guesses (votes where submission_id is null = voted for real)
+        const correctVoters = votes?.filter(v => v.submission_id === null) || [];
+        for (const v of correctVoters) {
+          const { data: sc } = await supabase.from('scores').select('*').eq('group_id', rd.group_id).eq('user_id', v.voter_id).single();
+          if (sc) await supabase.from('scores').update({ total_points: sc.total_points + 1, correct_guesses: sc.correct_guesses + 1 }).eq('id', sc.id);
         }
+        
         await supabase.from('rounds').update({ phase: 'results' }).eq('id', round.id);
         onUpdate({ ...round, phase: 'results' });
       };
@@ -467,20 +483,19 @@
             <div class="card center">
               <p class="text-muted mb-2" style="font-weight: 600;">Today's word:</p>
               <div class="word-display">${word?.word}</div>
-              ${isTruth && html`<div class="truth-notice"><span style="font-size: 24px;">🎯</span><span>You have the real definition! Rewrite it.</span></div>`}
             </div>
-            ${isTruth && html`<div class="real-def-box"><div class="real-def-label">📖 Real Definition</div><p style="font-style: italic;">${word?.definition}</p></div>`}
             ${mySubmission ? html`
               <div class="card">
-                <p class="text-muted mb-2" style="font-weight: 600;">Your submission:</p>
+                <p class="text-muted mb-2" style="font-weight: 600;">Your fake definition:</p>
                 <p>${mySubmission.definition}</p>
-                <p class="text-muted text-small mt-4">⏳ Waiting... (${submissions.length} submitted)</p>
+                <p class="text-muted text-small mt-4">⏳ Waiting for others... (${submissions.length} submitted)</p>
                 ${submissions.length >= 2 && html`<button class="btn btn-vote mt-4" onClick=${toVoting}>Start Voting →</button>`}
               </div>
             ` : html`
               <div class="card">
-                <p class="mb-3" style="font-weight: 600;">${isTruth ? '✍️ Rewrite the definition:' : '🎭 Make up a fake definition:'}</p>
-                <textarea class="input textarea" value=${definition} onInput=${(e) => setDefinition(e.target.value)} placeholder=${isTruth ? 'Type the real definition in your own words...' : 'Write a convincing fake...'}></textarea>
+                <p class="mb-3" style="font-weight: 600;">🎭 Make up a fake definition:</p>
+                <p class="text-muted text-small mb-3">Write something that sounds real but isn't! Try to fool your friends.</p>
+                <textarea class="input textarea" value=${definition} onInput=${(e) => setDefinition(e.target.value)} placeholder="Write a convincing fake definition..."></textarea>
                 <button class="btn" onClick=${submitDef} disabled=${submitting || !definition.trim()}>${submitting ? 'Submitting...' : 'Submit'}</button>
               </div>
             `}
@@ -489,12 +504,12 @@
       }
 
       if (round.phase === 'voting') {
-        const shuffled = [...submissions].sort(() => Math.random() - 0.5);
         return html`
           <div>
             <div class="card center">
-              <p class="text-muted mb-2" style="font-weight: 600;">Vote for the REAL definition:</p>
+              <p class="text-muted mb-2" style="font-weight: 600;">Which is the REAL definition?</p>
               <div class="word-display">${word?.word}</div>
+              <p class="text-muted text-small mt-2">One of these is real. The rest are fakes!</p>
             </div>
             ${myVote ? html`
               <div class="card center">
@@ -502,33 +517,38 @@
                 <p class="text-muted mb-4">Waiting for others...</p>
                 <button class="btn btn-results" onClick=${toResults}>See Results →</button>
               </div>
-            ` : mySubmission ? html`
+            ` : html`
               <div>
-                <p class="mb-3" style="font-weight: 600;">Which is real?</p>
-                ${shuffled.filter(s => s.user_id !== userId).map(sub => html`
-                  <div class="def-card ${selected === sub.id ? 'selected' : ''}" onClick=${() => setSelected(sub.id)}>${sub.definition}</div>
+                ${shuffledOptions.filter(opt => opt.userId !== userId).map(opt => html`
+                  <div class="def-card ${selected === opt.id ? 'selected' : ''}" onClick=${() => setSelected(opt.id)}>${opt.definition}</div>
                 `)}
                 <button class="btn btn-vote mt-3" onClick=${submitVote} disabled=${submitting || !selected}>${submitting ? 'Voting...' : 'Submit Vote'}</button>
               </div>
-            ` : html`<div class="card center"><p class="text-muted">You didn't submit this round.</p></div>`}
+            `}
           </div>
         `;
       }
 
+      // Results phase
       return html`
         <div>
-          <div class="card center">
+          <div class="card center" style="background: #F0FDF0; border-color: #58CC02;">
+            <p class="text-muted mb-2" style="font-weight: 600;">✓ The real definition:</p>
             <div class="word-display">${word?.word}</div>
-            <p style="margin-top: 8px; font-size: 18px;">${word?.definition}</p>
+            <p style="font-size: 18px; line-height: 1.5; margin-top: 12px;">${word?.definition}</p>
             ${word?.example_sentence && html`<p class="text-muted text-small mt-3" style="font-style: italic;">"${word.example_sentence}"</p>`}
           </div>
-          <h3 style="font-weight: 700; margin-bottom: 12px;">📊 Results</h3>
-          ${submissions.map(sub => html`
-            <div class="result-card ${sub.is_truth ? 'truth' : ''}">
-              <p>${sub.definition}</p>
-              <p style="font-size: 12px; color: #AFAFAF; margin-top: 8px;">— @${sub.profiles?.username}${sub.is_truth && html`<span class="result-truth-badge">✓ TRUTH</span>`}</p>
-            </div>
-          `)}
+          
+          ${submissions.length > 0 && html`
+            <h3 style="font-weight: 700; margin: 24px 0 12px;">🎭 The fakes:</h3>
+            ${submissions.map(sub => html`
+              <div class="result-card">
+                <p>${sub.definition}</p>
+                <p style="font-size: 12px; color: #AFAFAF; margin-top: 8px;">— @${sub.profiles?.username}</p>
+              </div>
+            `)}
+          `}
+          
           <button class="btn btn-secondary mt-4" onClick=${onBack}>← Back to Group</button>
         </div>
       `;
