@@ -80,7 +80,7 @@
     // ============================================
     // CONFIGURATION - UPDATE THESE VALUES!
     // ============================================
-       const SUPABASE_URL = 'https://azczbwojvdqmzufdyhbw.supabase.co';
+    const SUPABASE_URL = 'https://azczbwojvdqmzufdyhbw.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF6Y3pid29qdmRxbXp1ZmR5aGJ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyMzYxMDksImV4cCI6MjA5NzgxMjEwOX0.x-6cdRcLH71_Had2SGlcAbwT_oJ9MXVAiv0JwGLqJ08';
     // ============================================
 
@@ -379,7 +379,36 @@
           supabase.from('scores').select('*, profiles(*)').eq('group_id', group.id).order('total_points', { ascending: false }),
           supabase.from('group_members').select('*, profiles(*)').eq('group_id', group.id)
         ]);
-        setRounds(r.data || []); setScores(s.data || []); setMembers(m.data || []); setLoading(false);
+        
+        // For completed rounds, fetch votes and submissions
+        const roundsData = r.data || [];
+        const roundIds = roundsData.filter(rd => rd.phase === 'results').map(rd => rd.id);
+        
+        let votesData = [];
+        let subsData = [];
+        if (roundIds.length > 0) {
+          const [v, sub] = await Promise.all([
+            supabase.from('votes').select('*').in('round_id', roundIds),
+            supabase.from('submissions').select('*, profiles(*)').in('round_id', roundIds)
+          ]);
+          votesData = v.data || [];
+          subsData = sub.data || [];
+        }
+        
+        // Attach votes/subs to rounds
+        const roundsWithStats = roundsData.map(rd => {
+          if (rd.phase !== 'results') return rd;
+          const roundVotes = votesData.filter(v => v.round_id === rd.id);
+          const roundSubs = subsData.filter(s => s.round_id === rd.id);
+          const realVotes = roundVotes.filter(v => v.submission_id === null).length;
+          const fakeStats = roundSubs.map(sub => ({
+            username: sub.profiles?.username,
+            votes: roundVotes.filter(v => v.submission_id === sub.id).length
+          }));
+          return { ...rd, realVotes, fakeStats };
+        });
+        
+        setRounds(roundsWithStats); setScores(s.data || []); setMembers(m.data || []); setLoading(false);
       };
 
       const startRound = async () => {
@@ -406,9 +435,23 @@
 
           <h3 style="font-weight: 700; margin: 24px 0 12px;">📚 Recent Rounds</h3>
           ${rounds.length === 0 ? html`<div class="card center"><p class="text-muted">No rounds yet. Start one!</p></div>` : rounds.map(round => html`
-            <div class="round-item" onClick=${() => onSelectRound(round)}>
-              <span class="round-word">${round.words?.word}</span>
-              <span class="badge ${getPhase(round.phase).c}">${getPhase(round.phase).l}</span>
+            <div class="card" style="margin-bottom: 12px; cursor: pointer;" onClick=${() => onSelectRound(round)}>
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span class="round-word">${round.words?.word}</span>
+                <span class="badge ${getPhase(round.phase).c}">${getPhase(round.phase).l}</span>
+              </div>
+              ${round.phase === 'results' && html`
+                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #E5E5E5; font-size: 13px;">
+                  <div style="color: #58CC02; font-weight: 600; margin-bottom: 4px;">
+                    ✓ Real definition: ${round.realVotes} vote${round.realVotes !== 1 ? 's' : ''}
+                  </div>
+                  ${round.fakeStats?.filter(f => f.votes > 0).map(fake => html`
+                    <div style="color: #FF9600;">
+                      🎭 @${fake.username} fooled ${fake.votes}
+                    </div>
+                  `)}
+                </div>
+              `}
             </div>
           `)}
           <h3 style="font-weight: 700; margin: 24px 0 12px;">🏆 Leaderboard</h3>
