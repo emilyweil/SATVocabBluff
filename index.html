@@ -80,7 +80,7 @@
     // ============================================
     // CONFIGURATION - UPDATE THESE VALUES!
     // ============================================
-       const SUPABASE_URL = 'https://azczbwojvdqmzufdyhbw.supabase.co';
+    const SUPABASE_URL = 'https://azczbwojvdqmzufdyhbw.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF6Y3pid29qdmRxbXp1ZmR5aGJ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyMzYxMDksImV4cCI6MjA5NzgxMjEwOX0.x-6cdRcLH71_Had2SGlcAbwT_oJ9MXVAiv0JwGLqJ08';
     // ============================================
 
@@ -334,23 +334,29 @@
             };
             
             return html`
-              <div class="card" style="margin-bottom: 12px;">
-                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                  <div style="cursor: pointer; flex: 1;" onClick=${() => onSelectGroup(group)}>
-                    <div class="round-word">${group.name}</div>
-                    <div class="text-small text-muted">Code: <span class="invite-code">${group.invite_code}</span></div>
-                  </div>
-                  <span style="font-size: 24px; cursor: pointer;" onClick=${() => onSelectGroup(group)}>→</span>
+              <div class="round-item" style="position: relative;">
+                <div style="cursor: pointer; flex: 1;" onClick=${() => onSelectGroup(group)}>
+                  <div class="round-word">${group.name}</div>
+                  <div class="text-small text-muted">Code: <span class="invite-code">${group.invite_code}</span></div>
                 </div>
-                <div style="display: flex; gap: 8px; margin-top: 12px; border-top: 1px solid #E5E5E5; padding-top: 12px;">
-                  <button class="btn btn-secondary btn-small" style="flex: 1; background: #FFF3E0; color: #FF9600; border-color: #FFD93D;" onClick=${leaveGroup}>
-                    🚪 Leave
-                  </button>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <button 
+                    onClick=${leaveGroup} 
+                    title="Leave group"
+                    style="background: none; border: none; cursor: pointer; font-size: 18px; opacity: 0.4; padding: 4px;"
+                    onMouseOver=${(e) => e.target.style.opacity = '1'}
+                    onMouseOut=${(e) => e.target.style.opacity = '0.4'}
+                  >🚪</button>
                   ${isOwner && html`
-                    <button class="btn btn-small" style="flex: 1; background: #FF4B4B; box-shadow: 0 4px 0 #CC3333;" onClick=${deleteGroup}>
-                      🗑️ Delete
-                    </button>
+                    <button 
+                      onClick=${deleteGroup} 
+                      title="Delete group"
+                      style="background: none; border: none; cursor: pointer; font-size: 18px; opacity: 0.4; padding: 4px;"
+                      onMouseOver=${(e) => e.target.style.opacity = '1'}
+                      onMouseOut=${(e) => e.target.style.opacity = '0.4'}
+                    >🗑️</button>
                   `}
+                  <span style="font-size: 24px; cursor: pointer; margin-left: 4px;" onClick=${() => onSelectGroup(group)}>→</span>
                 </div>
               </div>
             `;
