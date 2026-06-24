@@ -80,7 +80,7 @@
     // ============================================
     // CONFIGURATION - UPDATE THESE VALUES!
     // ============================================
-    const SUPABASE_URL = 'https://azczbwojvdqmzufdyhbw.supabase.co';
+       const SUPABASE_URL = 'https://azczbwojvdqmzufdyhbw.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF6Y3pid29qdmRxbXp1ZmR5aGJ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyMzYxMDksImV4cCI6MjA5NzgxMjEwOX0.x-6cdRcLH71_Had2SGlcAbwT_oJ9MXVAiv0JwGLqJ08';
     // ============================================
 
@@ -149,7 +149,7 @@
 
           ${view === 'group' && activeGroup && html`
             <button class="back-btn" onClick=${() => setView('groups')}>← All Groups</button>
-            <${GroupDetail} group=${activeGroup} userId=${user.id} onSelectRound=${(r) => { setActiveRound(r); setView('round'); }} onLeaveGroup=${() => { setActiveGroup(null); setView('groups'); }} />
+            <${GroupDetail} group=${activeGroup} userId=${user.id} onSelectRound=${(r) => { setActiveRound(r); setView('round'); }} />
           `}
 
           ${view === 'groups' && html`
@@ -315,15 +315,46 @@
               <div style="font-size: 20px; font-weight: 700;">No groups yet!</div>
               <div class="text-muted">Create or join a group to play.</div>
             </div>
-          ` : groups.map(group => html`
-            <div class="round-item" onClick=${() => onSelectGroup(group)}>
-              <div>
-                <div class="round-word">${group.name}</div>
-                <div class="text-small text-muted">Code: <span class="invite-code">${group.invite_code}</span></div>
+          ` : groups.map(group => {
+            const isOwner = group.created_by === userId;
+            
+            const leaveGroup = async (e) => {
+              e.stopPropagation();
+              if (!confirm('Are you sure you want to leave this group?')) return;
+              await supabase.from('scores').delete().eq('group_id', group.id).eq('user_id', userId);
+              await supabase.from('group_members').delete().eq('group_id', group.id).eq('user_id', userId);
+              loadGroups();
+            };
+            
+            const deleteGroup = async (e) => {
+              e.stopPropagation();
+              if (!confirm('Are you sure you want to DELETE this group? This cannot be undone!')) return;
+              await supabase.from('groups').delete().eq('id', group.id);
+              loadGroups();
+            };
+            
+            return html`
+              <div class="card" style="margin-bottom: 12px;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                  <div style="cursor: pointer; flex: 1;" onClick=${() => onSelectGroup(group)}>
+                    <div class="round-word">${group.name}</div>
+                    <div class="text-small text-muted">Code: <span class="invite-code">${group.invite_code}</span></div>
+                  </div>
+                  <span style="font-size: 24px; cursor: pointer;" onClick=${() => onSelectGroup(group)}>→</span>
+                </div>
+                <div style="display: flex; gap: 8px; margin-top: 12px; border-top: 1px solid #E5E5E5; padding-top: 12px;">
+                  <button class="btn btn-secondary btn-small" style="flex: 1; background: #FFF3E0; color: #FF9600; border-color: #FFD93D;" onClick=${leaveGroup}>
+                    🚪 Leave
+                  </button>
+                  ${isOwner && html`
+                    <button class="btn btn-small" style="flex: 1; background: #FF4B4B; box-shadow: 0 4px 0 #CC3333;" onClick=${deleteGroup}>
+                      🗑️ Delete
+                    </button>
+                  `}
+                </div>
               </div>
-              <span style="font-size: 24px;">→</span>
-            </div>
-          `)}
+            `;
+          })}
         </div>
       `;
     }
@@ -331,15 +362,12 @@
     // ============================================
     // GROUP DETAIL
     // ============================================
-    function GroupDetail({ group, userId, onSelectRound, onLeaveGroup }) {
+    function GroupDetail({ group, userId, onSelectRound }) {
       const [rounds, setRounds] = useState([]);
       const [scores, setScores] = useState([]);
       const [members, setMembers] = useState([]);
       const [loading, setLoading] = useState(true);
       const [creating, setCreating] = useState(false);
-      const [showSettings, setShowSettings] = useState(false);
-
-      const isOwner = group.created_by === userId;
 
       useEffect(() => { loadData(); }, [group.id]);
 
@@ -362,19 +390,6 @@
         await loadData(); setCreating(false);
       };
 
-      const leaveGroup = async () => {
-        if (!confirm('Are you sure you want to leave this group?')) return;
-        await supabase.from('scores').delete().eq('group_id', group.id).eq('user_id', userId);
-        await supabase.from('group_members').delete().eq('group_id', group.id).eq('user_id', userId);
-        onLeaveGroup();
-      };
-
-      const deleteGroup = async () => {
-        if (!confirm('Are you sure you want to DELETE this group? This cannot be undone!')) return;
-        await supabase.from('groups').delete().eq('id', group.id);
-        onLeaveGroup();
-      };
-
       const getPhase = (p) => ({ submitting: { l: '✍️ Submit', c: 'badge-submit' }, voting: { l: '🗳️ Vote', c: 'badge-vote' }, results: { l: '🏆 Results', c: 'badge-results' } }[p] || { l: p, c: '' });
 
       if (loading) return html`<div class="loading">Loading...</div>`;
@@ -385,22 +400,7 @@
             <h2 style="font-size: 28px; font-weight: 800; margin-bottom: 8px;">${group.name}</h2>
             <p class="text-muted mb-3">${members.length} players • Code: <span class="invite-code">${group.invite_code}</span></p>
             <button class="btn" onClick=${startRound} disabled=${creating}>${creating ? 'Starting...' : '🎲 Start New Round'}</button>
-            <button class="btn btn-secondary mt-3" style="font-size: 14px;" onClick=${() => setShowSettings(!showSettings)}>⚙️ Settings</button>
           </div>
-          
-          ${showSettings && html`
-            <div class="card">
-              <h3 style="font-weight: 700; margin-bottom: 12px;">Group Settings</h3>
-              <button class="btn btn-secondary mb-2" style="background: #FFF3E0; color: #FF9600; border-color: #FFD93D;" onClick=${leaveGroup}>
-                🚪 Leave Group
-              </button>
-              ${isOwner && html`
-                <button class="btn" style="background: #FF4B4B; box-shadow: 0 4px 0 #CC3333;" onClick=${deleteGroup}>
-                  🗑️ Delete Group
-                </button>
-              `}
-            </div>
-          `}
 
           <h3 style="font-weight: 700; margin: 24px 0 12px;">📚 Recent Rounds</h3>
           ${rounds.length === 0 ? html`<div class="card center"><p class="text-muted">No rounds yet. Start one!</p></div>` : rounds.map(round => html`
@@ -413,7 +413,7 @@
           ${scores.length === 0 ? html`<div class="card center"><p class="text-muted">Play to earn points!</p></div>` : scores.map((s, i) => html`
             <div class="lb-row ${s.user_id === userId ? 'me' : ''}">
               <div style="display: flex; align-items: center;">
-                <span style="font-size: 24px; margin-right: 12px;">${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '#' + (i+1)}</span>
+                <span style="font-size: 24px; margin-right: 12px;">${s.total_points > 0 ? (i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '#' + (i+1)) : '•'}</span>
                 <span style="font-weight: 700;">@${s.profiles?.username}</span>
               </div>
               <div style="text-align: right;">
@@ -434,6 +434,7 @@
       const [submissions, setSubmissions] = useState([]);
       const [mySubmission, setMySubmission] = useState(null);
       const [myVote, setMyVote] = useState(null);
+      const [allVotes, setAllVotes] = useState([]);
       const [definition, setDefinition] = useState('');
       const [selected, setSelected] = useState(null);
       const [loading, setLoading] = useState(true);
@@ -443,16 +444,18 @@
       useEffect(() => { loadRound(); }, [round.id, round.phase]);
 
       const loadRound = async () => {
-        const [w, s, v] = await Promise.all([
+        const [w, s, v, av] = await Promise.all([
           supabase.from('words').select('*').eq('id', round.word_id).single(),
           supabase.from('submissions').select('*, profiles(*)').eq('round_id', round.id),
-          supabase.from('votes').select('*').eq('round_id', round.id).eq('voter_id', userId).single()
+          supabase.from('votes').select('*').eq('round_id', round.id).eq('voter_id', userId).single(),
+          supabase.from('votes').select('*, profiles:voter_id(username)').eq('round_id', round.id)
         ]);
         setWord(w.data);
         const subs = s.data || [];
         setSubmissions(subs);
         setMySubmission(subs.find(x => x.user_id === userId));
         setMyVote(v.data);
+        setAllVotes(av.data || []);
         
         // Create shuffled options: all submissions + the real definition
         if (w.data) {
@@ -559,8 +562,15 @@
               </div>
             ` : html`
               <div>
-                ${shuffledOptions.filter(opt => opt.oderId !== userId).map(opt => html`
-                  <div class="def-card ${selected === opt.id ? 'selected' : ''}" onClick=${() => setSelected(opt.id)}>${opt.definition}</div>
+                ${shuffledOptions.map(opt => html`
+                  <div 
+                    class="def-card ${selected === opt.id ? 'selected' : ''} ${opt.oderId === userId ? 'yours' : ''}" 
+                    onClick=${() => opt.oderId !== userId && setSelected(opt.id)}
+                    style="${opt.oderId === userId ? 'opacity: 0.6; cursor: not-allowed; border-style: dashed;' : ''}"
+                  >
+                    ${opt.definition}
+                    ${opt.oderId === userId ? html`<p style="font-size: 11px; color: #AFAFAF; margin-top: 8px; font-style: italic;">— Your submission (can't vote for your own)</p>` : ''}
+                  </div>
                 `)}
                 <button class="btn btn-vote mt-3" onClick=${submitVote} disabled=${submitting || !selected}>${submitting ? 'Voting...' : 'Submit Vote'}</button>
               </div>
@@ -570,6 +580,8 @@
       }
 
       // Results phase
+      const realVotes = allVotes.filter(v => v.submission_id === null);
+      
       return html`
         <div>
           <div class="card center" style="background: #F0FDF0; border-color: #58CC02;">
@@ -577,16 +589,29 @@
             <div class="word-display">${word?.word}</div>
             <p style="font-size: 18px; line-height: 1.5; margin-top: 12px;">${word?.definition}</p>
             ${word?.example_sentence && html`<p class="text-muted text-small mt-3" style="font-style: italic;">"${word.example_sentence}"</p>`}
+            ${realVotes.length > 0 && html`
+              <p style="margin-top: 12px; font-size: 14px; color: #58CC02; font-weight: 600;">
+                ✓ ${realVotes.length} correct vote${realVotes.length !== 1 ? 's' : ''}
+              </p>
+            `}
           </div>
           
           ${submissions.length > 0 && html`
             <h3 style="font-weight: 700; margin: 24px 0 12px;">🎭 The fakes:</h3>
-            ${submissions.map(sub => html`
-              <div class="result-card">
-                <p>${sub.definition}</p>
-                <p style="font-size: 12px; color: #AFAFAF; margin-top: 8px;">— @${sub.profiles?.username}</p>
-              </div>
-            `)}
+            ${submissions.map(sub => {
+              const voteCount = allVotes.filter(v => v.submission_id === sub.id).length;
+              return html`
+                <div class="result-card">
+                  <p>${sub.definition}</p>
+                  <p style="font-size: 12px; color: #AFAFAF; margin-top: 8px;">— @${sub.profiles?.username}</p>
+                  ${voteCount > 0 && html`
+                    <p style="font-size: 13px; color: #FF9600; margin-top: 6px; font-weight: 600;">
+                      🎭 Fooled ${voteCount} player${voteCount !== 1 ? 's' : ''} (+${voteCount * 2} pts)
+                    </p>
+                  `}
+                </div>
+              `;
+            })}
           `}
           
           <button class="btn btn-secondary mt-4" onClick=${onBack}>← Back to Group</button>
