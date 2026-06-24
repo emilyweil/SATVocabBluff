@@ -150,7 +150,7 @@
 
           ${view === 'group' && activeGroup && html`
             <button class="back-btn" onClick=${() => setView('groups')}>← All Groups</button>
-            <${GroupDetail} group=${activeGroup} userId=${user.id} onSelectRound=${(r) => { setActiveRound(r); setView('round'); }} />
+            <${GroupDetail} group=${activeGroup} userId=${user.id} onSelectRound=${(r) => { setActiveRound(r); setView('round'); }} onLeaveGroup=${() => { setActiveGroup(null); setView('groups'); }} />
           `}
 
           ${view === 'groups' && html`
@@ -332,12 +332,15 @@
     // ============================================
     // GROUP DETAIL
     // ============================================
-    function GroupDetail({ group, userId, onSelectRound }) {
+    function GroupDetail({ group, userId, onSelectRound, onLeaveGroup }) {
       const [rounds, setRounds] = useState([]);
       const [scores, setScores] = useState([]);
       const [members, setMembers] = useState([]);
       const [loading, setLoading] = useState(true);
       const [creating, setCreating] = useState(false);
+      const [showSettings, setShowSettings] = useState(false);
+
+      const isOwner = group.created_by === userId;
 
       useEffect(() => { loadData(); }, [group.id]);
 
@@ -356,14 +359,49 @@
         const usedIds = rounds.slice(0, 10).map(r => r.word_id);
         const available = words.filter(w => !usedIds.includes(w.id));
         const word = available.length > 0 ? available[Math.floor(Math.random() * available.length)] : words[Math.floor(Math.random() * words.length)];
-        const member = members[Math.floor(Math.random() * members.length)];
-        await supabase.from('rounds').insert({ group_id: group.id, word_id: word.id, truth_holder_id: member.user_id, phase: 'submitting' });
+        await supabase.from('rounds').insert({ group_id: group.id, word_id: word.id, phase: 'submitting' });
         await loadData(); setCreating(false);
+      };
+
+      const leaveGroup = async () => {
+        if (!confirm('Are you sure you want to leave this group?')) return;
+        await supabase.from('scores').delete().eq('group_id', group.id).eq('user_id', userId);
+        await supabase.from('group_members').delete().eq('group_id', group.id).eq('user_id', userId);
+        onLeaveGroup();
+      };
+
+      const deleteGroup = async () => {
+        if (!confirm('Are you sure you want to DELETE this group? This cannot be undone!')) return;
+        await supabase.from('groups').delete().eq('id', group.id);
+        onLeaveGroup();
       };
 
       const getPhase = (p) => ({ submitting: { l: '✍️ Submit', c: 'badge-submit' }, voting: { l: '🗳️ Vote', c: 'badge-vote' }, results: { l: '🏆 Results', c: 'badge-results' } }[p] || { l: p, c: '' });
 
       if (loading) return html`<div class="loading">Loading...</div>`;
+
+      return html`
+        <div>
+          <div class="card center">
+            <h2 style="font-size: 28px; font-weight: 800; margin-bottom: 8px;">${group.name}</h2>
+            <p class="text-muted mb-3">${members.length} players • Code: <span class="invite-code">${group.invite_code}</span></p>
+            <button class="btn" onClick=${startRound} disabled=${creating}>${creating ? 'Starting...' : '🎲 Start New Round'}</button>
+            <button class="btn btn-secondary mt-3" style="font-size: 14px;" onClick=${() => setShowSettings(!showSettings)}>⚙️ Settings</button>
+          </div>
+          
+          ${showSettings && html`
+            <div class="card">
+              <h3 style="font-weight: 700; margin-bottom: 12px;">Group Settings</h3>
+              <button class="btn btn-secondary mb-2" style="background: #FFF3E0; color: #FF9600; border-color: #FFD93D;" onClick=${leaveGroup}>
+                🚪 Leave Group
+              </button>
+              ${isOwner && html`
+                <button class="btn" style="background: #FF4B4B; box-shadow: 0 4px 0 #CC3333;" onClick=${deleteGroup}>
+                  🗑️ Delete Group
+                </button>
+              `}
+            </div>
+          `}
 
       return html`
         <div>
@@ -410,7 +448,7 @@
       const [submitting, setSubmitting] = useState(false);
       const [shuffledOptions, setShuffledOptions] = useState([]);
 
-      useEffect(() => { loadRound(); }, [round.id]);
+      useEffect(() => { loadRound(); }, [round.id, round.phase]);
 
       const loadRound = async () => {
         const [w, s, v] = await Promise.all([
@@ -419,17 +457,27 @@
           supabase.from('votes').select('*').eq('round_id', round.id).eq('voter_id', userId).single()
         ]);
         setWord(w.data);
-        setSubmissions(s.data || []);
-        setMySubmission(s.data?.find(x => x.user_id === userId));
+        const subs = s.data || [];
+        setSubmissions(subs);
+        setMySubmission(subs.find(x => x.user_id === userId));
         setMyVote(v.data);
         
         // Create shuffled options: all submissions + the real definition
-        if (w.data && s.data) {
-          const options = [
-            ...s.data.map(sub => ({ id: sub.id, definition: sub.definition, isReal: false, userId: sub.user_id, username: sub.profiles?.username })),
-            { id: 'real', definition: w.data.definition, isReal: true, userId: null, username: null }
-          ].sort(() => Math.random() - 0.5);
-          setShuffledOptions(options);
+        if (w.data) {
+          const fakeOptions = subs.map(sub => ({ 
+            id: sub.id, 
+            definition: sub.definition, 
+            isReal: false, 
+            oderId: sub.user_id
+          }));
+          const realOption = { 
+            id: 'real', 
+            definition: w.data.definition, 
+            isReal: true, 
+            oderId: null
+          };
+          const allOptions = [...fakeOptions, realOption].sort(() => Math.random() - 0.5);
+          setShuffledOptions(allOptions);
         }
         
         setLoading(false);
@@ -519,7 +567,7 @@
               </div>
             ` : html`
               <div>
-                ${shuffledOptions.filter(opt => opt.userId !== userId).map(opt => html`
+                ${shuffledOptions.filter(opt => opt.oderId !== userId).map(opt => html`
                   <div class="def-card ${selected === opt.id ? 'selected' : ''}" onClick=${() => setSelected(opt.id)}>${opt.definition}</div>
                 `)}
                 <button class="btn btn-vote mt-3" onClick=${submitVote} disabled=${submitting || !selected}>${submitting ? 'Voting...' : 'Submit Vote'}</button>
