@@ -461,6 +461,7 @@
         
         // Create shuffled options: all submissions + the real definition
         if (w.data) {
+          const capitalize = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
           const fakeOptions = subs.map(sub => ({ 
             id: sub.id, 
             definition: sub.definition, 
@@ -469,7 +470,7 @@
           }));
           const realOption = { 
             id: 'real', 
-            definition: w.data.definition, 
+            definition: capitalize(w.data.definition), 
             isReal: true, 
             oderId: null
           };
@@ -583,13 +584,14 @@
 
       // Results phase
       const realVotes = allVotes.filter(v => v.submission_id === null);
+      const capitalize = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
       
       return html`
         <div>
           <div class="card center" style="background: #F0FDF0; border-color: #58CC02;">
             <p class="text-muted mb-2" style="font-weight: 600;">✓ The real definition:</p>
             <div class="word-display">${word?.word}</div>
-            <p style="font-size: 18px; line-height: 1.5; margin-top: 12px;">${word?.definition}</p>
+            <p style="font-size: 18px; line-height: 1.5; margin-top: 12px;">${capitalize(word?.definition)}</p>
             ${word?.example_sentence && html`<p class="text-muted text-small mt-3" style="font-style: italic;">"${word.example_sentence}"</p>`}
             ${realVotes.length > 0 && html`
               <p style="margin-top: 12px; font-size: 14px; color: #58CC02; font-weight: 600;">
