@@ -28,6 +28,7 @@
     .def-card { background: white; border: 2px solid #E5E5E5; border-radius: 16px; padding: 16px; margin-bottom: 12px; cursor: pointer; }
     .def-card:active { border-color: #CECECE; }
     .def-card.selected { border-color: #58CC02; border-width: 3px; background: #F0FDF0; }
+    .def-card.wrong { border-color: #FF4B4B; border-width: 3px; background: #FFF0F0; }
     .badge { display: inline-block; padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; text-transform: uppercase; }
     .badge-submit { background: #DDF4FF; color: #1CB0F6; }
     .badge-vote { background: #F3E5FF; color: #CE82FF; }
@@ -53,8 +54,10 @@
     .step-num { background: #58CC02; color: white; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; }
     .invite-code { font-family: monospace; background: #F7F7F7; padding: 4px 10px; border-radius: 8px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; }
     .truth-notice { background: #F0FDF0; border: 2px solid #58CC02; border-radius: 12px; padding: 12px 16px; margin-top: 12px; display: flex; align-items: center; gap: 8px; }
+    .truth-notice.wrong-notice { background: #FFF0F0; border-color: #FF4B4B; }
     .real-def-box { background: #FFFBEB; border: 2px dashed #FFD93D; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
     .real-def-label { font-size: 12px; font-weight: 700; color: #B8860B; text-transform: uppercase; margin-bottom: 8px; }
+    .review-btn { background: #FFF3E0; color: #FF9600; border: none; padding: 8px 14px; border-radius: 12px; font-weight: 700; cursor: pointer; margin-right: 8px; font-size: 13px; }
     .center { text-align: center; }
     .mb-2 { margin-bottom: 8px; }
     .mb-3 { margin-bottom: 12px; }
@@ -137,6 +140,7 @@
               <span class="logo-text">Vocab Bluff</span>
             </div>
             <div style="display: flex; align-items: center;">
+              <button class="review-btn" onClick=${() => setView('review')}>📝 Review</button>
               <span class="username">@${profile?.username}</span>
               <button class="signout" onClick=${signOut}>Sign out</button>
             </div>
@@ -154,6 +158,11 @@
 
           ${view === 'groups' && html`
             <${GroupList} userId=${user.id} onSelectGroup=${(g) => { setActiveGroup(g); setView('group'); }} />
+          `}
+
+          ${view === 'review' && html`
+            <button class="back-btn" onClick=${() => setView('groups')}>← All Groups</button>
+            <${ReviewTest} userId=${user.id} />
           `}
         </div>
       `;
@@ -619,6 +628,122 @@
           `}
           
           <button class="btn btn-secondary mt-4" onClick=${onBack}>← Back to Group</button>
+        </div>
+      `;
+    }
+
+    // ============================================
+    // REVIEW TEST (cumulative, cross-group)
+    // ============================================
+    function ReviewTest({ userId }) {
+      const [loading, setLoading] = useState(true);
+      const [questions, setQuestions] = useState([]);
+      const [currentIndex, setCurrentIndex] = useState(0);
+      const [selected, setSelected] = useState(null);
+      const [score, setScore] = useState(0);
+      const [answered, setAnswered] = useState(0);
+
+      useEffect(() => { loadQuestions(); }, []);
+
+      const shuffle = (arr) => [...arr].sort(() => Math.random() - 0.5);
+      const capitalize = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+
+      const loadQuestions = async () => {
+        setLoading(true);
+
+        // Every group this user is a member of
+        const { data: gm } = await supabase.from('group_members').select('group_id').eq('user_id', userId);
+        const groupIds = (gm || []).map(g => g.group_id);
+        if (groupIds.length === 0) { setQuestions([]); setLoading(false); return; }
+
+        // Every completed round across all of those groups
+        const { data: roundsData } = await supabase
+          .from('rounds')
+          .select('*, words(*), submissions(*)')
+          .in('group_id', groupIds)
+          .eq('phase', 'results');
+
+        const built = (roundsData || [])
+          .filter(r => r.words && r.submissions && r.submissions.length > 0)
+          .map(r => {
+            const options = shuffle([
+              { key: 'real', text: capitalize(r.words.definition), correct: true },
+              ...r.submissions.map(s => ({ key: s.id, text: s.definition, correct: false }))
+            ]);
+            return { id: r.id, word: r.words.word, options };
+          });
+
+        setQuestions(shuffle(built));
+        setCurrentIndex(0);
+        setSelected(null);
+        setScore(0);
+        setAnswered(0);
+        setLoading(false);
+      };
+
+      const selectOption = (opt) => {
+        if (selected) return;
+        setSelected(opt);
+        setAnswered(a => a + 1);
+        if (opt.correct) setScore(sc => sc + 1);
+      };
+
+      const nextQuestion = () => { setSelected(null); setCurrentIndex(i => i + 1); };
+
+      if (loading) return html`<div class="loading">Loading review test...</div>`;
+
+      if (questions.length === 0) {
+        return html`
+          <div class="card empty-state">
+            <div class="empty-icon">📝</div>
+            <div style="font-size: 20px; font-weight: 700;">No words to review yet!</div>
+            <div class="text-muted">Finish some bluff rounds and they'll show up here.</div>
+          </div>
+        `;
+      }
+
+      if (currentIndex >= questions.length) {
+        return html`
+          <div class="card center">
+            <div style="font-size: 64px; margin-bottom: 16px;">🎉</div>
+            <h2 style="font-size: 24px; font-weight: 800; margin-bottom: 8px;">Review Complete!</h2>
+            <p class="text-muted mb-4">You scored ${score} out of ${questions.length}</p>
+            <button class="btn" onClick=${loadQuestions}>🔄 Take Again</button>
+          </div>
+        `;
+      }
+
+      const q = questions[currentIndex];
+
+      return html`
+        <div>
+          <div class="card center">
+            <p class="text-muted mb-2" style="font-weight: 600;">Question ${currentIndex + 1} of ${questions.length}</p>
+            <div class="word-display">${q.word}</div>
+            <p class="text-muted text-small">Which definition is REAL?</p>
+          </div>
+          <div>
+            ${q.options.map(opt => {
+              let cls = 'def-card';
+              if (selected) {
+                if (opt.correct) cls += ' selected';
+                else if (selected.key === opt.key) cls += ' wrong';
+              }
+              return html`
+                <div class="${cls}" onClick=${() => selectOption(opt)}>
+                  ${opt.text}
+                  ${selected && opt.correct && html`<span class="result-truth-badge">REAL</span>`}
+                </div>
+              `;
+            })}
+          </div>
+          ${selected && html`
+            <div class="truth-notice ${selected.correct ? '' : 'wrong-notice'}">
+              <span>${selected.correct ? '✅ Correct!' : '❌ Not quite — the real definition is marked above.'}</span>
+            </div>
+            <button class="btn mt-3" onClick=${nextQuestion}>${currentIndex + 1 < questions.length ? 'Next Word →' : 'See Score →'}</button>
+          `}
+          <p class="text-muted text-small center mt-3">Score so far: ${score}/${answered}</p>
         </div>
       `;
     }
