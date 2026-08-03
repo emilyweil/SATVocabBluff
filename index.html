@@ -381,11 +381,6 @@
     // GROUP DETAIL
     // ============================================
     // ============================================
-// GROUP DETAIL
-// ============================================
-// ============================================
-// GROUP DETAIL
-// ============================================
 // ============================================
 // GROUP DETAIL
 // ============================================
@@ -400,7 +395,7 @@ function GroupDetail({ group, userId, onSelectRound }) {
 
   const loadData = async () => {
     const [r, s, m] = await Promise.all([
-      supabase.from('rounds').select('*, words(*), submissions(*)').eq('group_id', group.id).order('created_at', { ascending: false }).limit(10),
+      supabase.from('rounds').select('*, words(*), submissions(*), votes(*)').eq('group_id', group.id).order('created_at', { ascending: false }).limit(10),
       supabase.from('scores').select('*, profiles(*)').eq('group_id', group.id).order('total_points', { ascending: false }),
       supabase.from('group_members').select('*, profiles(*)').eq('group_id', group.id)
     ]);
@@ -419,7 +414,15 @@ function GroupDetail({ group, userId, onSelectRound }) {
 
   const getRoundBadge = (round) => {
     if (round.phase === 'voting') return { l: 'Vote', c: 'badge-vote' };
-    if (round.phase === 'results') return { l: 'Results', c: 'badge-results' };
+    if (round.phase === 'results') {
+      const votes = round.votes || [];
+      const submissions = round.submissions || [];
+      const mySubmission = submissions.find(s => s.user_id === userId);
+      const correctPoint = votes.some(v => v.voter_id === userId && v.submission_id === null) ? 1 : 0;
+      const foolCount = mySubmission ? votes.filter(v => v.submission_id === mySubmission.id).length : 0;
+      const points = correctPoint + foolCount * 2;
+      return { l: `Results · +${points} pts`, c: 'badge-results' };
+    }
     // phase === 'submitting'
     const subs = round.submissions || [];
     const mySubmitted = subs.some(s => s.user_id === userId);
