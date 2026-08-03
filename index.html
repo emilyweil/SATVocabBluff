@@ -45,7 +45,7 @@
     .result-truth-badge { display: inline-block; background: #58CC02; color: white; padding: 2px 8px; border-radius: 8px; font-size: 11px; font-weight: 700; margin-left: 8px; }
     .header { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; margin-bottom: 16px; }
     .logo { display: flex; align-items: center; gap: 8px; }
-    .logo-icon { font-size: 32px; }
+    .logo-icon { font-size: 22px; font-weight: 800; color: #58CC02; }
     .logo-text { font-size: 22px; font-weight: 800; color: #58CC02; }
     .username { background: #F7F7F7; padding: 8px 12px; border-radius: 12px; font-weight: 700; color: #777; }
     .signout { background: none; border: none; color: #AFAFAF; cursor: pointer; font-weight: 600; margin-left: 12px; }
@@ -133,9 +133,8 @@
       if (!user) return html`<${Auth} />`;
 
       return html`
-        <div class="container">
-          <header class="header">
-           <div class="logo">
+      <div class="logo">
+  <span class="logo-icon">;-)</span>
   <span class="logo-text">Vocab Bluff</span>
 </div>
             <div style="display: flex; align-items: center;">
