@@ -386,6 +386,9 @@
 // ============================================
 // GROUP DETAIL
 // ============================================
+// ============================================
+// GROUP DETAIL
+// ============================================
 function GroupDetail({ group, userId, onSelectRound }) {
   const [rounds, setRounds] = useState([]);
   const [scores, setScores] = useState([]);
@@ -415,15 +418,15 @@ function GroupDetail({ group, userId, onSelectRound }) {
   };
 
   const getRoundBadge = (round) => {
-    if (round.phase === 'voting') return { l: '🗳️ Vote', c: 'badge-vote' };
-    if (round.phase === 'results') return { l: '🏆 Results', c: 'badge-results' };
+    if (round.phase === 'voting') return { l: 'Vote', c: 'badge-vote' };
+    if (round.phase === 'results') return { l: 'Results', c: 'badge-results' };
     // phase === 'submitting'
     const subs = round.submissions || [];
     const mySubmitted = subs.some(s => s.user_id === userId);
     const allSubmitted = members.length > 0 && subs.length >= members.length;
-    if (allSubmitted) return { l: '🗳️ Vote', c: 'badge-vote' };
-    if (mySubmitted) return { l: '⏳ Waiting', c: 'badge-submit' };
-    return { l: '✍️ Submit', c: 'badge-submit' };
+    if (allSubmitted) return { l: 'Vote', c: 'badge-vote' };
+    if (mySubmitted) return { l: 'Waiting', c: 'badge-submit' };
+    return { l: 'Submit', c: 'badge-submit' };
   };
 
   if (loading) return html`<div class="loading">Loading...</div>`;
@@ -436,7 +439,7 @@ function GroupDetail({ group, userId, onSelectRound }) {
         <button class="btn" onClick=${startRound} disabled=${creating}>${creating ? 'Adding...' : 'Add a New Word'}</button>
       </div>
 
-      <h3 style="font-weight: 700; margin: 24px 0 12px;">📚 Recent Words</h3>
+      <h3 style="font-weight: 700; margin: 24px 0 12px;">Recent Words</h3>
       ${rounds.length === 0 ? html`<div class="card center"><p class="text-muted">No words yet. Add one!</p></div>` : rounds.map(round => {
         const badge = getRoundBadge(round);
         return html`
@@ -446,7 +449,8 @@ function GroupDetail({ group, userId, onSelectRound }) {
           </div>
         `;
       })}
-      <h3 style="font-weight: 700; margin: 24px 0 12px;">🏆 Leaderboard</h3>
+      <h3 style="font-weight: 700; margin: 24px 0 4px;">Leaderboard</h3>
+      <p class="text-muted text-small mb-3">+1 point for choosing the real definition, +2 points if your fake definition is selected</p>
       ${scores.length === 0 ? html`<div class="card center"><p class="text-muted">Play to earn points!</p></div>` : scores.map((s, i) => html`
         <div class="lb-row ${s.user_id === userId ? 'me' : ''}">
           <div style="display: flex; align-items: center;">
@@ -741,37 +745,36 @@ function GroupDetail({ group, userId, onSelectRound }) {
 
       const q = questions[currentIndex];
 
-      return html`
-        <div>
-          <div class="card center">
-            <p class="text-muted mb-2" style="font-weight: 600;">Question ${currentIndex + 1} of ${questions.length}</p>
-            <div class="word-display">${q.word}</div>
-            <p class="text-muted text-small">Which definition is REAL?</p>
+return html`
+  <div>
+    <div class="card center">
+      <p class="text-muted mb-2" style="font-weight: 600;">Question ${currentIndex + 1} of ${questions.length}</p>
+      <div class="word-display">${q.word}</div>
+      <p class="text-muted text-small">Which definition is REAL?</p>
+    </div>
+    <div>
+      ${q.options.map(opt => {
+        let cls = 'def-card';
+        let statusText = '';
+        let statusColor = '';
+        if (selected) {
+          if (opt.correct) { cls += ' selected'; statusText = '✅ Correct!'; statusColor = '#58CC02'; }
+          else if (selected.key === opt.key) { cls += ' wrong'; statusText = '❌ Not quite'; statusColor = '#FF4B4B'; }
+        }
+        return html`
+          <div class="${cls}" onClick=${() => selectOption(opt)}>
+            ${opt.text}
+            ${statusText && html`<p style="font-size: 13px; font-weight: 700; margin-top: 8px; color: ${statusColor};">${statusText}</p>`}
           </div>
-          <div>
-            ${q.options.map(opt => {
-              let cls = 'def-card';
-              if (selected) {
-                if (opt.correct) cls += ' selected';
-                else if (selected.key === opt.key) cls += ' wrong';
-              }
-              return html`
-                <div class="${cls}" onClick=${() => selectOption(opt)}>
-                  ${opt.text}
-                  ${selected && opt.correct && html`<span class="result-truth-badge">REAL</span>`}
-                </div>
-              `;
-            })}
-          </div>
-          ${selected && html`
-            <div class="truth-notice ${selected.correct ? '' : 'wrong-notice'}">
-              <span>${selected.correct ? '✅ Correct!' : '❌ Not quite — the real definition is marked above.'}</span>
-            </div>
-            <button class="btn mt-3" onClick=${nextQuestion}>${currentIndex + 1 < questions.length ? 'Next Word →' : 'See Score →'}</button>
-          `}
-          <p class="text-muted text-small center mt-3">Score so far: ${score}/${answered}</p>
-        </div>
-      `;
+        `;
+      })}
+    </div>
+    ${selected && html`
+      <button class="btn mt-3" onClick=${nextQuestion}>${currentIndex + 1 < questions.length ? 'Next Word →' : 'See Score →'}</button>
+    `}
+    <p class="text-muted text-small center mt-3">Score so far: ${score}/${answered}</p>
+  </div>
+`;
     }
 
     // ============================================
