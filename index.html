@@ -35,6 +35,9 @@
     .badge-results { background: #FFF3E0; color: #FF9600; }
     .badge-review { background: #FFFBEB; color: #B8860B; }
     .badge-done { background: #F0FDF0; color: #58CC02; }
+    .join-banner { display: flex; justify-content: space-between; align-items: center; background: #F0FDF0; border: 2px solid #58CC02; color: #2E7D32; border-radius: 16px; padding: 14px 16px; margin-bottom: 16px; font-weight: 700; font-size: 14px; }
+    .join-banner-error { background: #FFF0F0; border-color: #FF4B4B; color: #B91C1C; }
+    .invite-btn { width: 100%; margin-top: 12px; color: #1CB0F6; }
     .streak-badge { display: inline-block; background: #FFF3E0; color: #FF9600; padding: 8px 18px; border-radius: 20px; font-weight: 800; font-size: 16px; margin-top: 4px; }
     .challenge-item { border-color: #58CC02; border-width: 3px; }
     .lb-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-radius: 12px; margin-bottom: 8px; background: #F7F7F7; }
@@ -277,11 +280,59 @@
       const [error, setError] = useState(null);
       const [copiedId, setCopiedId] = useState(null);
 
-      useEffect(() => { loadGroups(); }, []);
+      const [joining, setJoining] = useState(!!initialJoinCode);
+      const [joinBanner, setJoinBanner] = useState(null); // { type: 'success'|'error', message }
 
       useEffect(() => {
-        if (initialJoinCode) { setJoinCode(initialJoinCode); setShowJoin(true); }
-      }, [initialJoinCode]);
+        if (initialJoinCode) {
+          autoJoinFromLink(initialJoinCode);
+        } else {
+          loadGroups();
+        }
+      }, []);
+
+      const clearJoinParam = () => {
+        if (window.history?.replaceState) {
+          const url = new URL(window.location.href);
+          url.searchParams.delete('join');
+          window.history.replaceState({}, '', url);
+        }
+      };
+
+      // Looks up a group by invite code and joins the current user if not
+      // already a member. Shared by the automatic (link) and manual (form) flows.
+      const attemptJoin = async (rawCode) => {
+        const code = (rawCode || '').trim().toLowerCase();
+        if (!code) return { error: 'Enter an invite code.' };
+        const { data: group } = await supabase.from('groups').select().eq('invite_code', code).single();
+        if (!group) return { error: 'Invite code not found.' };
+        const { data: existing } = await supabase.from('group_members').select().eq('group_id', group.id).eq('user_id', userId).single();
+        if (!existing) {
+          await supabase.from('group_members').insert({ group_id: group.id, user_id: userId });
+          await supabase.from('scores').insert({ group_id: group.id, user_id: userId });
+        }
+        return { group, alreadyMember: !!existing };
+      };
+
+      // Someone opened an invite link: join them automatically, no form needed.
+      const autoJoinFromLink = async (code) => {
+        setJoining(true);
+        const result = await attemptJoin(code);
+        onConsumeJoinCode && onConsumeJoinCode();
+        clearJoinParam();
+        if (result.error) {
+          setJoinBanner({ type: 'error', message: `That invite link didn't work (${result.error}). You can try entering the code manually below.` });
+          setJoinCode(code);
+          setShowJoin(true);
+        } else {
+          setJoinBanner({
+            type: 'success',
+            message: result.alreadyMember ? `You're already in "${result.group.name}"!` : `🎉 You joined "${result.group.name}"!`
+          });
+        }
+        setJoining(false);
+        await loadGroups();
+      };
 
       const todayStr = () => new Date().toISOString().slice(0, 10);
 
@@ -331,26 +382,20 @@
       const joinGroup = async (e) => {
         e.preventDefault();
         setError(null);
-        const { data: group } = await supabase.from('groups').select().eq('invite_code', joinCode.trim().toLowerCase()).single();
-        if (!group) { setError('Group not found!'); return; }
-        const { data: existing } = await supabase.from('group_members').select().eq('group_id', group.id).eq('user_id', userId).single();
-        if (existing) { setError("You're already in this group!"); return; }
-        await supabase.from('group_members').insert({ group_id: group.id, user_id: userId });
-        await supabase.from('scores').insert({ group_id: group.id, user_id: userId });
+        const result = await attemptJoin(joinCode);
+        if (result.error) { setError(result.error); return; }
         setJoinCode(''); setShowJoin(false);
-        onConsumeJoinCode && onConsumeJoinCode();
-        if (window.history?.replaceState) {
-          const url = new URL(window.location.href);
-          url.searchParams.delete('join');
-          window.history.replaceState({}, '', url);
-        }
+        setJoinBanner({
+          type: 'success',
+          message: result.alreadyMember ? `You're already in "${result.group.name}"!` : `🎉 You joined "${result.group.name}"!`
+        });
         loadGroups();
       };
 
       const copyInvite = async (e, group) => {
         e.stopPropagation();
         const link = `${window.location.origin}${window.location.pathname}?join=${group.invite_code}`;
-        const text = `Join my Vocab Bluff group "${group.name}"! ${link}`;
+        const text = `You're invited to my Vocab Bluff group "${group.name}"! Tap this invite link to join: ${link}`;
         try {
           await navigator.clipboard.writeText(text);
         } catch (err) {
@@ -367,6 +412,7 @@
         setTimeout(() => setCopiedId(id => id === group.id ? null : id), 2000);
       };
 
+      if (joining) return html`<div class="loading">Joining your group...</div>`;
       if (loading) return html`<div class="loading">Loading groups...</div>`;
 
       return html`
@@ -375,6 +421,12 @@
             <h2 style="font-size: 24px; font-weight: 800;">Your Groups</h2>
             <p class="text-muted">Play Vocab Bluff with friends</p>
           </div>
+          ${joinBanner && html`
+            <div class="join-banner ${joinBanner.type === 'error' ? 'join-banner-error' : ''}">
+              <span>${joinBanner.message}</span>
+              <button onClick=${() => setJoinBanner(null)} style="background: none; border: none; cursor: pointer; font-weight: 700; opacity: 0.6;">✕</button>
+            </div>
+          `}
           <div class="flex gap-2 mb-4">
             <button class="btn btn-small flex-1" onClick=${() => { setShowCreate(true); setShowJoin(false); }}>➕ Create</button>
             <button class="btn btn-secondary btn-small flex-1" onClick=${() => { setShowJoin(true); setShowCreate(false); }}>🔗 Join</button>
@@ -431,17 +483,9 @@
                 <div style="display: flex; align-items: center;">
                   <div style="cursor: pointer; flex: 1;" onClick=${() => onSelectGroup(group)}>
                     <div class="round-word">${group.name}</div>
-                    <div class="text-small text-muted">Code: <span class="invite-code">${group.invite_code}</span></div>
+                    <div class="text-small text-muted">Invite code: <span class="invite-code">${group.invite_code}</span></div>
                   </div>
                   <div style="display: flex; align-items: center; gap: 8px;">
-                    <button
-                      onClick=${(e) => copyInvite(e, group)}
-                      title="Copy invite link"
-                      style="background: none; border: none; cursor: pointer; padding: 4px; display: flex; align-items: center; color: ${copiedId === group.id ? '#58CC02' : 'inherit'};"
-                    >${copiedId === group.id
-                      ? html`<span style="font-size: 12px; font-weight: 700; color: #58CC02;">Copied!</span>`
-                      : html`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>`}
-                    </button>
                     <button 
                       onClick=${leaveGroup} 
                       title="Leave group"
@@ -457,6 +501,9 @@
                     <span style="font-size: 24px; cursor: pointer; margin-left: 4px;" onClick=${() => onSelectGroup(group)}>→</span>
                   </div>
                 </div>
+                <button class="btn btn-secondary btn-small invite-btn" onClick=${(e) => copyInvite(e, group)}>
+                  ${copiedId === group.id ? '✅ Invite link copied — go ahead and paste it!' : '🔗 Copy Invite Link to Share'}
+                </button>
                 <div style="margin-top: 10px; cursor: pointer;" onClick=${() => onSelectGroup(group)}>
                   ${!status ? html`<span class="badge badge-submit">Loading...</span>` :
                     status.done
