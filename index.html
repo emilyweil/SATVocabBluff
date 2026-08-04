@@ -37,7 +37,11 @@
     .badge-done { background: #F0FDF0; color: #58CC02; }
     .join-banner { display: flex; justify-content: space-between; align-items: center; background: #F0FDF0; border: 2px solid #58CC02; color: #2E7D32; border-radius: 16px; padding: 14px 16px; margin-bottom: 16px; font-weight: 700; font-size: 14px; }
     .join-banner-error { background: #FFF0F0; border-color: #FF4B4B; color: #B91C1C; }
-    .invite-btn { width: 100%; margin-top: 12px; color: #1CB0F6; }
+    .status-banner { display: block; width: 100%; text-align: center; padding: 12px; border-radius: 12px; font-weight: 800; font-size: 15px; margin-top: 12px; }
+    .status-banner.pending { background: #DDF4FF; color: #1CB0F6; }
+    .status-banner.done { background: #F0FDF0; color: #58CC02; }
+    .invite-link-text { display: block; width: 100%; background: none; border: none; color: #AFAFAF; font-weight: 600; font-size: 12px; cursor: pointer; padding: 8px 0 0; text-align: center; }
+    .invite-link-text:hover { color: #1CB0F6; }
     .streak-badge { display: inline-block; background: #FFF3E0; color: #FF9600; padding: 8px 18px; border-radius: 20px; font-weight: 800; font-size: 16px; margin-top: 4px; }
     .challenge-item { border-color: #58CC02; border-width: 3px; }
     .lb-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-radius: 12px; margin-bottom: 8px; background: #F7F7F7; }
@@ -141,7 +145,7 @@
       };
 
       if (loading) return html`<div class="container"><div class="loading">Loading...</div></div>`;
-      if (!user) return html`<${Auth} />`;
+      if (!user) return html`<${Auth} pendingJoinCode=${pendingJoinCode} />`;
 
       return html`
         <div class="container">
@@ -188,8 +192,8 @@
     // ============================================
     // AUTH
     // ============================================
-    function Auth() {
-      const [mode, setMode] = useState('signin');
+    function Auth({ pendingJoinCode }) {
+      const [mode, setMode] = useState(pendingJoinCode ? 'signup' : 'signin');
       const [email, setEmail] = useState('');
       const [password, setPassword] = useState('');
       const [username, setUsername] = useState('');
@@ -203,14 +207,20 @@
         setError(null);
 
         if (mode === 'signup') {
-          const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { username } } });
+          // If email confirmation is required, the confirmation link sends the
+          // person back to this exact URL — including the invite code — so
+          // they still get auto-joined once they land back here signed in.
+          const redirectTo = pendingJoinCode
+            ? `${window.location.origin}${window.location.pathname}?join=${pendingJoinCode}`
+            : `${window.location.origin}${window.location.pathname}`;
+          const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { username }, emailRedirectTo: redirectTo } });
           if (error) {
             setError(error.message);
           } else if (data.session) {
             // Email confirmation is off — user is signed in immediately.
             // onAuthStateChange in App() picks up the session automatically.
           } else {
-            // Fallback in case confirmation is ever turned back on later
+            // Email confirmation is required — they'll come right back here via redirectTo.
             setConfirmationSent(true);
           }
         } else {
@@ -228,7 +238,7 @@
               <div style="font-size: 72px; margin-bottom: 16px;">📬</div>
               <h2 style="font-size: 24px; font-weight: 800; margin-bottom: 12px;">Check your email!</h2>
               <p style="color: #666; line-height: 1.6;">We sent a confirmation link to <strong>${email}</strong></p>
-              <p style="color: #666; line-height: 1.6; margin-top: 8px;">Click the link in the email to activate your account.</p>
+              <p style="color: #666; line-height: 1.6; margin-top: 8px;">Click the link in the email to activate your account.${pendingJoinCode ? " You'll be automatically added to the group you were invited to." : ''}</p>
               <button class="btn btn-secondary mt-4" onClick=${() => { setConfirmationSent(false); setMode('signin'); }}>← Back to Sign In</button>
             </div>
           </div>
@@ -243,6 +253,11 @@
               <h1 style="font-size: 28px; font-weight: 800; color: #58CC02;">Vocab Bluff</h1>
               <p class="text-muted">Learn SAT words by fooling your friends!</p>
             </div>
+            ${pendingJoinCode && html`
+              <div class="join-banner mb-4">
+                <span>🎉 You've been invited to a group! Sign up or sign in to join automatically.</span>
+              </div>
+            `}
             <div class="tabs">
               <button class="tab ${mode === 'signin' ? 'active' : ''}" onClick=${() => setMode('signin')}>Sign In</button>
               <button class="tab ${mode === 'signup' ? 'active' : ''}" onClick=${() => setMode('signup')}>Sign Up</button>
@@ -501,16 +516,16 @@
                     <span style="font-size: 24px; cursor: pointer; margin-left: 4px;" onClick=${() => onSelectGroup(group)}>→</span>
                   </div>
                 </div>
-                <button class="btn btn-secondary btn-small invite-btn" onClick=${(e) => copyInvite(e, group)}>
-                  ${copiedId === group.id ? '✅ Invite link copied — go ahead and paste it!' : '🔗 Copy Invite Link to Share'}
-                </button>
-                <div style="margin-top: 10px; cursor: pointer;" onClick=${() => onSelectGroup(group)}>
-                  ${!status ? html`<span class="badge badge-submit">Loading...</span>` :
+                <div style="cursor: pointer;" onClick=${() => onSelectGroup(group)}>
+                  ${!status ? html`<span class="status-banner pending">Loading...</span>` :
                     status.done
-                      ? html`<span class="badge badge-done">✅ ${status.type === 'review' ? 'Review done today' : 'Done for today'}</span>`
-                      : html`<span class="badge badge-submit">${status.type === 'review' ? '📝 Weekly review due' : '🎯 Word challenge waiting'}</span>`
+                      ? html`<span class="status-banner done">✅ ${status.type === 'review' ? 'Review done today' : 'Done for today'}</span>`
+                      : html`<span class="status-banner pending">${status.type === 'review' ? '📝 Weekly review due' : '🎯 Word challenge waiting'}</span>`
                   }
                 </div>
+                <button class="invite-link-text" onClick=${(e) => copyInvite(e, group)}>
+                  ${copiedId === group.id ? '✅ Invite link copied!' : '🔗 Copy invite link'}
+                </button>
               </div>
             `;
           })}
