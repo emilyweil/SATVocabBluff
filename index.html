@@ -34,6 +34,7 @@
     .badge-vote { background: #F3E5FF; color: #CE82FF; }
     .badge-results { background: #FFF3E0; color: #FF9600; }
     .badge-review { background: #FFFBEB; color: #B8860B; }
+    .badge-done { background: #F0FDF0; color: #58CC02; }
     .streak-badge { display: inline-block; background: #FFF3E0; color: #FF9600; padding: 8px 18px; border-radius: 20px; font-weight: 800; font-size: 16px; margin-top: 4px; }
     .challenge-item { border-color: #58CC02; border-width: 3px; }
     .lb-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-radius: 12px; margin-bottom: 8px; background: #F7F7F7; }
@@ -102,6 +103,10 @@
       const [view, setView] = useState('groups');
       const [activeGroup, setActiveGroup] = useState(null);
       const [activeRound, setActiveRound] = useState(null);
+      const [pendingJoinCode, setPendingJoinCode] = useState(() => {
+        const params = new URLSearchParams(window.location.search);
+        return (params.get('join') || '').trim();
+      });
 
       useEffect(() => {
         checkUser();
@@ -165,7 +170,7 @@
           `}
 
           ${view === 'groups' && html`
-            <${GroupList} userId=${user.id} onSelectGroup=${(g) => { setActiveGroup(g); setView('group'); }} />
+            <${GroupList} userId=${user.id} onSelectGroup=${(g) => { setActiveGroup(g); setView('group'); }} initialJoinCode=${pendingJoinCode} onConsumeJoinCode=${() => setPendingJoinCode('')} />
           `}
 
           ${view === 'review' && html`
@@ -261,21 +266,56 @@
     // ============================================
     // GROUP LIST
     // ============================================
-    function GroupList({ userId, onSelectGroup }) {
+    function GroupList({ userId, onSelectGroup, initialJoinCode, onConsumeJoinCode }) {
       const [groups, setGroups] = useState([]);
+      const [todayStatus, setTodayStatus] = useState({}); // group_id -> { type, done }
       const [loading, setLoading] = useState(true);
       const [showCreate, setShowCreate] = useState(false);
-      const [showJoin, setShowJoin] = useState(false);
+      const [showJoin, setShowJoin] = useState(!!initialJoinCode);
       const [newName, setNewName] = useState('');
-      const [joinCode, setJoinCode] = useState('');
+      const [joinCode, setJoinCode] = useState(initialJoinCode || '');
       const [error, setError] = useState(null);
+      const [copiedId, setCopiedId] = useState(null);
 
       useEffect(() => { loadGroups(); }, []);
 
+      useEffect(() => {
+        if (initialJoinCode) { setJoinCode(initialJoinCode); setShowJoin(true); }
+      }, [initialJoinCode]);
+
+      const todayStr = () => new Date().toISOString().slice(0, 10);
+
       const loadGroups = async () => {
+        setLoading(true);
         const { data } = await supabase.from('group_members').select('groups(*)').eq('user_id', userId);
-        setGroups(data?.map(d => d.groups).filter(Boolean) || []);
+        const gs = data?.map(d => d.groups).filter(Boolean) || [];
+        setGroups(gs);
         setLoading(false);
+        loadTodayStatus(gs);
+      };
+
+      // For each group, make sure today's challenge exists, then figure out
+      // whether *this* user still has something to do today.
+      const loadTodayStatus = async (gs) => {
+        const results = await Promise.all(gs.map(async (group) => {
+          const { data: round } = await supabase.rpc('ensure_daily_challenge', { p_group_id: group.id });
+          if (!round) return [group.id, null];
+
+          if (round.round_type === 'review') {
+            const { data: mine } = await supabase.from('review_completions').select('id').eq('round_id', round.id).eq('user_id', userId).maybeSingle();
+            return [group.id, { type: 'review', done: !!mine }];
+          }
+
+          // word round
+          if (round.phase === 'results') return [group.id, { type: 'word', done: true }];
+          if (round.phase === 'voting') {
+            const { data: mine } = await supabase.from('votes').select('id').eq('round_id', round.id).eq('voter_id', userId).maybeSingle();
+            return [group.id, { type: 'word', done: !!mine }];
+          }
+          const { data: mine } = await supabase.from('submissions').select('id').eq('round_id', round.id).eq('user_id', userId).maybeSingle();
+          return [group.id, { type: 'word', done: !!mine }];
+        }));
+        setTodayStatus(Object.fromEntries(results));
       };
 
       const createGroup = async (e) => {
@@ -297,7 +337,34 @@
         if (existing) { setError("You're already in this group!"); return; }
         await supabase.from('group_members').insert({ group_id: group.id, user_id: userId });
         await supabase.from('scores').insert({ group_id: group.id, user_id: userId });
-        setJoinCode(''); setShowJoin(false); loadGroups();
+        setJoinCode(''); setShowJoin(false);
+        onConsumeJoinCode && onConsumeJoinCode();
+        if (window.history?.replaceState) {
+          const url = new URL(window.location.href);
+          url.searchParams.delete('join');
+          window.history.replaceState({}, '', url);
+        }
+        loadGroups();
+      };
+
+      const copyInvite = async (e, group) => {
+        e.stopPropagation();
+        const link = `${window.location.origin}${window.location.pathname}?join=${group.invite_code}`;
+        const text = `Join my Vocab Bluff group "${group.name}"! ${link}`;
+        try {
+          await navigator.clipboard.writeText(text);
+        } catch (err) {
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          try { document.execCommand('copy'); } catch (err2) { /* ignore */ }
+          document.body.removeChild(ta);
+        }
+        setCopiedId(group.id);
+        setTimeout(() => setCopiedId(id => id === group.id ? null : id), 2000);
       };
 
       if (loading) return html`<div class="loading">Loading groups...</div>`;
@@ -342,7 +409,8 @@
             </div>
           ` : groups.map(group => {
             const isOwner = group.created_by === userId;
-            
+            const status = todayStatus[group.id];
+
             const leaveGroup = async (e) => {
               e.stopPropagation();
               if (!confirm('Are you sure you want to leave this group?')) return;
@@ -359,25 +427,42 @@
             };
             
             return html`
-              <div class="round-item" style="position: relative;">
-                <div style="cursor: pointer; flex: 1;" onClick=${() => onSelectGroup(group)}>
-                  <div class="round-word">${group.name}</div>
-                  <div class="text-small text-muted">Code: <span class="invite-code">${group.invite_code}</span></div>
-                </div>
-                <div style="display: flex; align-items: center; gap: 8px;">
-                  <button 
-                    onClick=${leaveGroup} 
-                    title="Leave group"
-                    style="background: none; border: none; cursor: pointer; padding: 4px; display: flex; align-items: center;"
-                  ><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg></button>
-                  ${isOwner && html`
+              <div class="round-item" style="position: relative; flex-direction: column; align-items: stretch;">
+                <div style="display: flex; align-items: center;">
+                  <div style="cursor: pointer; flex: 1;" onClick=${() => onSelectGroup(group)}>
+                    <div class="round-word">${group.name}</div>
+                    <div class="text-small text-muted">Code: <span class="invite-code">${group.invite_code}</span></div>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <button
+                      onClick=${(e) => copyInvite(e, group)}
+                      title="Copy invite link"
+                      style="background: none; border: none; cursor: pointer; padding: 4px; display: flex; align-items: center; color: ${copiedId === group.id ? '#58CC02' : 'inherit'};"
+                    >${copiedId === group.id
+                      ? html`<span style="font-size: 12px; font-weight: 700; color: #58CC02;">Copied!</span>`
+                      : html`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>`}
+                    </button>
                     <button 
-                      onClick=${deleteGroup} 
-                      title="Delete group"
+                      onClick=${leaveGroup} 
+                      title="Leave group"
                       style="background: none; border: none; cursor: pointer; padding: 4px; display: flex; align-items: center;"
-                    ><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
-                  `}
-                  <span style="font-size: 24px; cursor: pointer; margin-left: 4px;" onClick=${() => onSelectGroup(group)}>→</span>
+                    ><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg></button>
+                    ${isOwner && html`
+                      <button 
+                        onClick=${deleteGroup} 
+                        title="Delete group"
+                        style="background: none; border: none; cursor: pointer; padding: 4px; display: flex; align-items: center;"
+                      ><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
+                    `}
+                    <span style="font-size: 24px; cursor: pointer; margin-left: 4px;" onClick=${() => onSelectGroup(group)}>→</span>
+                  </div>
+                </div>
+                <div style="margin-top: 10px; cursor: pointer;" onClick=${() => onSelectGroup(group)}>
+                  ${!status ? html`<span class="badge badge-submit">Loading...</span>` :
+                    status.done
+                      ? html`<span class="badge badge-done">✅ ${status.type === 'review' ? 'Review done today' : 'Done for today'}</span>`
+                      : html`<span class="badge badge-submit">${status.type === 'review' ? '📝 Weekly review due' : '🎯 Word challenge waiting'}</span>`
+                  }
                 </div>
               </div>
             `;
