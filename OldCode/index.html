@@ -33,9 +33,6 @@
     .badge-submit { background: #DDF4FF; color: #1CB0F6; }
     .badge-vote { background: #F3E5FF; color: #CE82FF; }
     .badge-results { background: #FFF3E0; color: #FF9600; }
-    .badge-review { background: #FFFBEB; color: #B8860B; }
-    .streak-badge { display: inline-block; background: #FFF3E0; color: #FF9600; padding: 8px 18px; border-radius: 20px; font-weight: 800; font-size: 16px; margin-top: 4px; }
-    .challenge-item { border-color: #58CC02; border-width: 3px; }
     .lb-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-radius: 12px; margin-bottom: 8px; background: #F7F7F7; }
     .lb-row.me { background: #F0FDF0; border: 2px solid #58CC02; }
     .lb-points { color: #FF9600; font-weight: 800; font-size: 18px; }
@@ -143,18 +140,13 @@
               <span class="logo-text">Vocab Bluff</span>
             </div>
             <div style="display: flex; align-items: center;">
-              <button class="review-btn" onClick=${() => setView('review')}>🧠 Practice</button>
+              <button class="review-btn" onClick=${() => setView('review')}>📝 Review</button>
               <span class="username">${profile?.username}</span>
               <button class="signout" onClick=${signOut}>Sign out</button>
             </div>
           </header>
 
-          ${view === 'round' && activeRound && activeRound.round_type === 'review' && html`
-            <button class="back-btn" onClick=${() => setView('group')}>← Back to ${activeGroup?.name}</button>
-            <${WeeklyReview} round=${activeRound} group=${activeGroup} userId=${user.id} onBack=${() => setView('group')} />
-          `}
-
-          ${view === 'round' && activeRound && activeRound.round_type !== 'review' && html`
+          ${view === 'round' && activeRound && html`
             <button class="back-btn" onClick=${() => setView('group')}>← Back to ${activeGroup?.name}</button>
             <${GameRound} round=${activeRound} userId=${user.id} onBack=${() => setView('group')} onUpdate=${(r) => setActiveRound(r)} />
           `}
@@ -170,7 +162,6 @@
 
           ${view === 'review' && html`
             <button class="back-btn" onClick=${() => setView('groups')}>← All Groups</button>
-            <p class="text-muted text-small mb-3">Optional practice across every word you've played. This doesn't affect any group's streak — that's the "Weekly Review" inside each group.</p>
             <${ReviewTest} userId=${user.id} />
           `}
         </div>
@@ -248,10 +239,10 @@
             </form>
             <div style="margin-top: 24px; padding-top: 20px; border-top: 2px solid #E5E5E5;">
               <h4 style="color: #AFAFAF; font-size: 12px; text-transform: uppercase; margin-bottom: 16px;">How It Works</h4>
-              <div class="step"><span class="step-num">1</span><span>Join a group — every day, your group gets a new word automatically</span></div>
-              <div class="step"><span class="step-num">2</span><span>Everyone writes a fake definition, then votes on which is real</span></div>
-              <div class="step"><span class="step-num">3</span><span>Finish as a group before the day ends to keep your streak alive 🔥</span></div>
-              <div class="step"><span class="step-num">4</span><span>Every 7th day is a cumulative Weekly Review instead of a new word</span></div>
+              <div class="step"><span class="step-num">1</span><span>Join a group with friends</span></div>
+              <div class="step"><span class="step-num">2</span><span>One person gets the real definition, others make up fakes</span></div>
+              <div class="step"><span class="step-num">3</span><span>Vote on which is real</span></div>
+              <div class="step"><span class="step-num">4</span><span>Score points for fooling friends!</span></div>
             </div>
           </div>
         </div>
@@ -393,39 +384,31 @@
       const [rounds, setRounds] = useState([]);
       const [scores, setScores] = useState([]);
       const [members, setMembers] = useState([]);
-      const [progress, setProgress] = useState(null);
       const [loading, setLoading] = useState(true);
-      const [error, setError] = useState(null);
+      const [creating, setCreating] = useState(false);
 
       useEffect(() => { loadData(); }, [group.id]);
 
-      const todayStr = () => new Date().toISOString().slice(0, 10);
-
       const loadData = async () => {
-        setLoading(true);
-        setError(null);
-        // Idempotent: makes sure today's word (or weekly review) exists for this group.
-        const { error: rpcErr } = await supabase.rpc('ensure_daily_challenge', { p_group_id: group.id });
-        if (rpcErr) setError(rpcErr.message);
-
-        const [r, s, m, p] = await Promise.all([
-          supabase.from('rounds').select('*, words(*), submissions(*), votes(*), review_completions(*)').eq('group_id', group.id).order('round_date', { ascending: false }).limit(20),
+        const [r, s, m] = await Promise.all([
+          supabase.from('rounds').select('*, words(*), submissions(*), votes(*)').eq('group_id', group.id).order('created_at', { ascending: false }).limit(10),
           supabase.from('scores').select('*, profiles(*)').eq('group_id', group.id).order('total_points', { ascending: false }),
-          supabase.from('group_members').select('*, profiles(*)').eq('group_id', group.id),
-          supabase.from('group_progress').select('*').eq('group_id', group.id).single()
+          supabase.from('group_members').select('*, profiles(*)').eq('group_id', group.id)
         ]);
-        setRounds(r.data || []); setScores(s.data || []); setMembers(m.data || []); setProgress(p.data || null);
-        setLoading(false);
+        setRounds(r.data || []); setScores(s.data || []); setMembers(m.data || []); setLoading(false);
+      };
+
+      const startRound = async () => {
+        setCreating(true);
+        const { data: words } = await supabase.from('words').select('id');
+        const usedIds = rounds.slice(0, 10).map(r => r.word_id);
+        const available = words.filter(w => !usedIds.includes(w.id));
+        const word = available.length > 0 ? available[Math.floor(Math.random() * available.length)] : words[Math.floor(Math.random() * words.length)];
+        await supabase.from('rounds').insert({ group_id: group.id, word_id: word.id, phase: 'submitting' });
+        await loadData(); setCreating(false);
       };
 
       const getRoundBadge = (round) => {
-        if (round.round_type === 'review') {
-          const completions = round.review_completions || [];
-          const mine = completions.find(c => c.user_id === userId);
-          if (members.length > 0 && completions.length >= members.length) return { l: 'Completed', c: 'badge-results' };
-          if (mine) return { l: `Waiting (${completions.length}/${members.length})`, c: 'badge-review' };
-          return { l: 'Take Test', c: 'badge-review' };
-        }
         if (round.phase === 'voting') return { l: 'Vote', c: 'badge-vote' };
         if (round.phase === 'results') {
           const votes = round.votes || [];
@@ -436,46 +419,31 @@
           const points = correctPoint + foolCount * 2;
           return { l: `Results · +${points} pts`, c: 'badge-results' };
         }
+        // phase === 'submitting'
         const subs = round.submissions || [];
         const mySubmitted = subs.some(s => s.user_id === userId);
-        if (mySubmitted) return { l: `Waiting (${subs.length}/${members.length})`, c: 'badge-submit' };
+        const allSubmitted = members.length > 0 && subs.length >= members.length;
+        if (allSubmitted) return { l: 'Vote', c: 'badge-vote' };
+        if (mySubmitted) return { l: 'Waiting', c: 'badge-submit' };
         return { l: 'Submit', c: 'badge-submit' };
       };
 
       if (loading) return html`<div class="loading">Loading...</div>`;
 
-      const todayRound = rounds.find(r => r.round_date === todayStr());
-      const pastRounds = rounds.filter(r => r.round_date !== todayStr());
-      const streak = progress?.current_streak || 0;
-      const best = progress?.longest_streak || 0;
-
       return html`
         <div>
           <div class="card center">
-            <h2 style="font-size: 28px; font-weight: 800; margin-bottom: 4px;">${group.name}</h2>
+            <h2 style="font-size: 28px; font-weight: 800; margin-bottom: 8px;">${group.name}</h2>
             <p class="text-muted mb-3">${members.length} players • Code: <span class="invite-code">${group.invite_code}</span></p>
-            <div class="streak-badge">🔥 ${streak} day streak${best > streak ? html` <span style="font-weight: 600; font-size: 13px; opacity: 0.75;">(best ${best})</span>` : ''}</div>
-            ${members.length < 2 && html`<p class="text-muted text-small mt-3">Invite at least one friend — bluffing needs more than one player!</p>`}
+            <button class="btn" onClick=${startRound} disabled=${creating}>${creating ? 'Adding...' : 'Add a New Word'}</button>
           </div>
 
-          <h3 style="font-weight: 700; margin: 20px 0 12px;">Today's Challenge</h3>
-          ${error && html`<p style="color: #FF4B4B; font-size: 13px; margin-bottom: 8px;">${error}</p>`}
-          ${todayRound ? html`
-            <div class="round-item challenge-item" onClick=${() => onSelectRound(todayRound)}>
-              <div>
-                <span class="round-word">${todayRound.round_type === 'review' ? '📝 Weekly Review' : todayRound.words?.word}</span>
-                <div class="text-small text-muted">${todayRound.round_type === 'review' ? 'Cumulative test of your last 7 words' : "Today's bluff round"}</div>
-              </div>
-              <span class="badge ${getRoundBadge(todayRound).c}">${getRoundBadge(todayRound).l}</span>
-            </div>
-          ` : html`<div class="card center"><p class="text-muted">Setting up today's challenge...</p></div>`}
-
-          <h3 style="font-weight: 700; margin: 24px 0 12px;">History</h3>
-          ${pastRounds.length === 0 ? html`<div class="card center"><p class="text-muted">No history yet.</p></div>` : pastRounds.map(round => {
+          <h3 style="font-weight: 700; margin: 24px 0 12px;">Recent Words</h3>
+          ${rounds.length === 0 ? html`<div class="card center"><p class="text-muted">No words yet. Add one!</p></div>` : rounds.map(round => {
             const badge = getRoundBadge(round);
             return html`
               <div class="round-item" onClick=${() => onSelectRound(round)}>
-                <span class="round-word">${round.round_type === 'review' ? '📝 Weekly Review' : round.words?.word}</span>
+                <span class="round-word">${round.words?.word}</span>
                 <span class="badge ${badge.c}">${badge.l}</span>
               </div>
             `;
@@ -554,73 +522,40 @@
       const submitDef = async () => {
         setSubmitting(true);
         await supabase.from('submissions').insert({ round_id: round.id, user_id: userId, definition: definition.trim(), is_truth: false });
-        setDefinition('');
-        await checkSubmittingAdvance();
-        setSubmitting(false);
+        setDefinition(''); await loadRound(); setSubmitting(false);
       };
 
-      // Auto-advance to voting once every current member has submitted.
-      const checkSubmittingAdvance = async () => {
-        const [subsRes, gmRes] = await Promise.all([
-          supabase.from('submissions').select('id').eq('round_id', round.id),
-          supabase.from('group_members').select('id').eq('group_id', round.group_id)
-        ]);
-        const subCount = (subsRes.data || []).length;
-        const memCount = (gmRes.data || []).length;
-        if (memCount >= 2 && subCount >= memCount) {
-          await supabase.from('rounds').update({ phase: 'voting' }).eq('id', round.id);
-          onUpdate({ ...round, phase: 'voting' });
-          return;
-        }
-        await loadRound();
-      };
+      const toVoting = async () => { await supabase.from('rounds').update({ phase: 'voting' }).eq('id', round.id); onUpdate({ ...round, phase: 'voting' }); };
 
       const submitVote = async () => {
         if (!selected) return;
         setSubmitting(true);
         // Store the selected id (could be 'real' or a submission id)
         await supabase.from('votes').insert({ round_id: round.id, voter_id: userId, submission_id: selected === 'real' ? null : selected });
-        await checkVotingAdvance();
-        setSubmitting(false);
+        await loadRound(); setSubmitting(false);
       };
 
-      // Auto-advance to results once every current member has voted.
-      const checkVotingAdvance = async () => {
-        const [votesRes, gmRes] = await Promise.all([
-          supabase.from('votes').select('id').eq('round_id', round.id),
-          supabase.from('group_members').select('id').eq('group_id', round.group_id)
-        ]);
-        const voteCount = (votesRes.data || []).length;
-        const memCount = (gmRes.data || []).length;
-        if (memCount >= 2 && voteCount >= memCount) {
-          await finalizeResults();
-          return;
-        }
-        await loadRound();
-      };
-
-      const finalizeResults = async () => {
+      const toResults = async () => {
         const { data: votes } = await supabase.from('votes').select('*').eq('round_id', round.id);
-
+        const { data: rd } = await supabase.from('rounds').select('group_id').eq('id', round.id).single();
+        
         // Award points for fooling others (votes on fake submissions)
         for (const sub of submissions) {
           const fools = votes?.filter(v => v.submission_id === sub.id).length || 0;
           if (fools > 0) {
-            const { data: sc } = await supabase.from('scores').select('*').eq('group_id', round.group_id).eq('user_id', sub.user_id).single();
+            const { data: sc } = await supabase.from('scores').select('*').eq('group_id', rd.group_id).eq('user_id', sub.user_id).single();
             if (sc) await supabase.from('scores').update({ total_points: sc.total_points + fools * 2, fools: sc.fools + fools }).eq('id', sc.id);
           }
         }
-
+        
         // Award points for correct guesses (votes where submission_id is null = voted for real)
         const correctVoters = votes?.filter(v => v.submission_id === null) || [];
         for (const v of correctVoters) {
-          const { data: sc } = await supabase.from('scores').select('*').eq('group_id', round.group_id).eq('user_id', v.voter_id).single();
+          const { data: sc } = await supabase.from('scores').select('*').eq('group_id', rd.group_id).eq('user_id', v.voter_id).single();
           if (sc) await supabase.from('scores').update({ total_points: sc.total_points + 1, correct_guesses: sc.correct_guesses + 1 }).eq('id', sc.id);
         }
-
+        
         await supabase.from('rounds').update({ phase: 'results' }).eq('id', round.id);
-        // Group has now fully completed today's word challenge — advance the streak.
-        await supabase.rpc('complete_challenge', { p_group_id: round.group_id, p_round_id: round.id });
         onUpdate({ ...round, phase: 'results' });
       };
 
@@ -637,8 +572,8 @@
               <div class="card">
                 <p class="text-muted mb-2" style="font-weight: 600;">Your fake definition:</p>
                 <p>${mySubmission.definition}</p>
-                <p class="text-muted text-small mt-4">⏳ Waiting for everyone to submit... (${submissions.length} in)</p>
-                <p class="text-muted text-small">Voting starts automatically once the whole group has submitted.</p>
+                <p class="text-muted text-small mt-4">⏳ Waiting for others... (${submissions.length} submitted)</p>
+                ${submissions.length >= 2 && html`<button class="btn btn-vote mt-4" onClick=${toVoting}>Start Voting →</button>`}
               </div>
             ` : html`
               <div class="card">
@@ -663,8 +598,8 @@
             ${myVote ? html`
               <div class="card center">
                 <p style="font-weight: 600;">✅ You voted!</p>
-                <p class="text-muted">Waiting for the rest of the group to vote...</p>
-                <p class="text-muted text-small mt-2">Results appear automatically once everyone's in.</p>
+                <p class="text-muted mb-4">Waiting for others...</p>
+                <button class="btn btn-results" onClick=${toResults}>See Results →</button>
               </div>
             ` : html`
               <div>
@@ -727,153 +662,7 @@
     }
 
     // ============================================
-    // WEEKLY REVIEW (mandatory, one per group, every 7 words)
-    // ============================================
-    function WeeklyReview({ round, group, userId, onBack }) {
-      const [loading, setLoading] = useState(true);
-      const [questions, setQuestions] = useState([]);
-      const [members, setMembers] = useState([]);
-      const [completions, setCompletions] = useState([]);
-      const [currentIndex, setCurrentIndex] = useState(0);
-      const [selected, setSelected] = useState(null);
-      const [score, setScore] = useState(0);
-      const [finished, setFinished] = useState(false);
-      const [saving, setSaving] = useState(false);
-
-      const shuffle = (arr) => [...arr].sort(() => Math.random() - 0.5);
-      const capitalize = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
-
-      useEffect(() => { load(); }, [round.id]);
-
-      const load = async () => {
-        setLoading(true);
-        const ids = round.review_round_ids || [];
-        const [roundsRes, compRes, memRes] = await Promise.all([
-          ids.length ? supabase.from('rounds').select('*, words(*), submissions(*)').in('id', ids) : Promise.resolve({ data: [] }),
-          supabase.from('review_completions').select('*').eq('round_id', round.id),
-          supabase.from('group_members').select('id').eq('group_id', group.id)
-        ]);
-
-        const built = (roundsRes.data || [])
-          .filter(r => r.words)
-          .map(r => {
-            const options = shuffle([
-              { key: 'real', text: capitalize(r.words.definition), correct: true },
-              ...(r.submissions || []).map(s => ({ key: s.id, text: s.definition, correct: false }))
-            ]);
-            return { id: r.id, word: r.words.word, options };
-          });
-
-        setQuestions(shuffle(built));
-        setCompletions(compRes.data || []);
-        setMembers(memRes.data || []);
-        setCurrentIndex(0);
-        setSelected(null);
-        setScore(0);
-        setFinished(false);
-        setLoading(false);
-      };
-
-      const myCompletion = completions.find(c => c.user_id === userId);
-
-      const selectOption = (opt) => {
-        if (selected) return;
-        setSelected(opt);
-        if (opt.correct) setScore(sc => sc + 1);
-      };
-
-      const nextQuestion = async () => {
-        if (currentIndex + 1 < questions.length) {
-          setSelected(null);
-          setCurrentIndex(i => i + 1);
-          return;
-        }
-        // Last question answered — record this member's completion.
-        setSaving(true);
-        await supabase.from('review_completions').insert({ round_id: round.id, user_id: userId, score, total: questions.length });
-        const { data: comps } = await supabase.from('review_completions').select('*').eq('round_id', round.id);
-        setCompletions(comps || []);
-        if (members.length > 0 && (comps || []).length >= members.length) {
-          // Whole group has now finished the weekly review — advance the streak.
-          await supabase.rpc('complete_challenge', { p_group_id: group.id, p_round_id: round.id });
-        }
-        setSaving(false);
-        setFinished(true);
-      };
-
-      if (loading) return html`<div class="loading">Loading weekly review...</div>`;
-
-      if (questions.length === 0) {
-        return html`
-          <div class="card empty-state">
-            <div class="empty-icon">📝</div>
-            <div style="font-size: 20px; font-weight: 700;">Nothing to review yet</div>
-            <div class="text-muted">Play a few word rounds first.</div>
-            <button class="btn btn-secondary mt-4" onClick=${onBack}>← Back to Group</button>
-          </div>
-        `;
-      }
-
-      if (myCompletion && !finished) {
-        return html`
-          <div class="card center">
-            <div style="font-size: 56px; margin-bottom: 12px;">✅</div>
-            <h2 style="font-size: 22px; font-weight: 800; margin-bottom: 8px;">You already finished this week's review!</h2>
-            <p class="text-muted mb-2">You scored ${myCompletion.score} / ${myCompletion.total}</p>
-            <p class="text-muted text-small">${completions.length} of ${members.length} group members done</p>
-            <button class="btn btn-secondary mt-4" onClick=${onBack}>← Back to Group</button>
-          </div>
-        `;
-      }
-
-      if (finished) {
-        const groupDone = members.length > 0 && completions.length >= members.length;
-        return html`
-          <div class="card center">
-            <div style="font-size: 64px; margin-bottom: 16px;">${groupDone ? '🎉' : '⏳'}</div>
-            <h2 style="font-size: 24px; font-weight: 800; margin-bottom: 8px;">Review Complete!</h2>
-            <p class="text-muted mb-2">You scored ${score} out of ${questions.length}</p>
-            <p class="text-muted text-small mb-4">${groupDone ? "Everyone in the group finished — streak continues! 🔥" : `${completions.length} of ${members.length} group members done. The streak continues once everyone finishes.`}</p>
-            <button class="btn btn-secondary" onClick=${onBack} disabled=${saving}>← Back to Group</button>
-          </div>
-        `;
-      }
-
-      const q = questions[currentIndex];
-
-      return html`
-        <div>
-          <div class="card center">
-            <p class="text-muted mb-2" style="font-weight: 600;">Weekly Review · Question ${currentIndex + 1} of ${questions.length}</p>
-            <div class="word-display">${q.word}</div>
-            <p class="text-muted text-small">Which definition is REAL?</p>
-          </div>
-          <div>
-            ${q.options.map(opt => {
-              let cls = 'def-card';
-              let statusText = '';
-              let statusColor = '';
-              if (selected) {
-                if (opt.correct) { cls += ' selected'; statusText = '✅ Correct!'; statusColor = '#58CC02'; }
-                else if (selected.key === opt.key) { cls += ' wrong'; statusText = '❌ Not quite'; statusColor = '#FF4B4B'; }
-              }
-              return html`
-                <div class="${cls}" onClick=${() => selectOption(opt)}>
-                  ${opt.text}
-                  ${statusText && html`<p style="font-size: 13px; font-weight: 700; margin-top: 8px; color: ${statusColor};">${statusText}</p>`}
-                </div>
-              `;
-            })}
-          </div>
-          ${selected && html`
-            <button class="btn mt-3" onClick=${nextQuestion} disabled=${saving}>${saving ? 'Saving...' : (currentIndex + 1 < questions.length ? 'Next Word →' : 'Finish Review →')}</button>
-          `}
-        </div>
-      `;
-    }
-
-    // ============================================
-    // PRACTICE MODE (optional, cumulative, cross-group)
+    // REVIEW TEST (cumulative, cross-group)
     // ============================================
     function ReviewTest({ userId }) {
       const [loading, setLoading] = useState(true);
