@@ -10,7 +10,7 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Nunito', sans-serif; background: #F7F7F7; min-height: 100vh; color: #3C3C3C; }
     .container { max-width: 500px; margin: 0 auto; padding: 16px; }
-    .card { background: white; border-radius: 16px; border: 2px solid #E5E5E5; padding: 24px; margin-bottom: 16px; }
+    .card { background: white; border-radius: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); padding: 24px; margin-bottom: 16px; }
     .btn { background: #58CC02; color: white; border: none; padding: 14px 24px; border-radius: 16px; font-size: 16px; font-weight: 700; cursor: pointer; width: 100%; text-transform: uppercase; box-shadow: 0 4px 0 #46A302; position: relative; top: 0; }
     .btn:active { box-shadow: 0 2px 0 #46A302; top: 2px; }
     .btn:disabled { background: #E5E5E5; box-shadow: 0 4px 0 #CECECE; color: #AFAFAF; }
@@ -25,7 +25,7 @@
     .tabs { display: flex; gap: 8px; margin-bottom: 20px; }
     .tab { flex: 1; padding: 12px; border-radius: 12px; border: 2px solid #E5E5E5; background: white; color: #AFAFAF; cursor: pointer; font-weight: 700; }
     .tab.active { background: #DDF4FF; border-color: #1CB0F6; color: #1CB0F6; }
-    .def-card { background: white; border: 2px solid #E5E5E5; border-radius: 16px; padding: 16px; margin-bottom: 12px; cursor: pointer; }
+    .def-card { background: white; border: 2px solid transparent; box-shadow: 0 1px 4px rgba(0,0,0,0.06); border-radius: 16px; padding: 16px; margin-bottom: 12px; cursor: pointer; }
     .def-card:active { border-color: #CECECE; }
     .def-card.selected { border-color: #58CC02; border-width: 3px; background: #F0FDF0; }
     .def-card.wrong { border-color: #FF4B4B; border-width: 3px; background: #FFF0F0; }
@@ -40,18 +40,18 @@
     .status-banner { display: block; width: 100%; text-align: center; padding: 12px; border-radius: 12px; font-weight: 800; font-size: 15px; margin-top: 12px; }
     .status-banner.pending { background: #DDF4FF; color: #1CB0F6; }
     .status-banner.done { background: #F0FDF0; color: #58CC02; }
-    .invite-link-text { display: inline; background: none; border: none; color: #1CB0F6; font-weight: 600; font-size: 12px; cursor: pointer; padding: 0; text-align: left; }
-    .invite-link-text:hover { text-decoration: underline; }
+    .invite-link-text { display: inline; background: none; border: none; color: #AFAFAF; font-weight: 400; font-size: 14px; font-family: inherit; cursor: pointer; padding: 0; text-align: left; }
+    .invite-link-text:hover { color: #1CB0F6; }
     .streak-badge { display: inline-block; background: #FFF3E0; color: #FF9600; padding: 8px 18px; border-radius: 20px; font-weight: 800; font-size: 16px; margin-top: 4px; }
     .round-item.challenge-item { border: 3px solid #58CC02; box-shadow: 0 0 0 3px rgba(88, 204, 2, 0.15); }
     .lb-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-radius: 12px; margin-bottom: 8px; background: #F7F7F7; }
     .lb-row.me { background: #F0FDF0; border: 2px solid #58CC02; }
     .lb-points { color: #FF9600; font-weight: 800; font-size: 18px; }
     .lb-stats { color: #AFAFAF; font-size: 12px; }
-    .round-item { display: flex; justify-content: space-between; align-items: center; padding: 16px; background: white; border: 2px solid #E5E5E5; border-radius: 16px; margin-bottom: 12px; cursor: pointer; }
+    .round-item { display: flex; justify-content: space-between; align-items: center; padding: 16px; background: white; border: 2px solid transparent; box-shadow: 0 1px 4px rgba(0,0,0,0.06); border-radius: 16px; margin-bottom: 12px; cursor: pointer; }
     .round-item:hover { border-color: #58CC02; }
     .round-word { font-size: 1.25rem; font-weight: 700; text-transform: capitalize; }
-    .result-card { background: white; border: 2px solid #E5E5E5; border-radius: 16px; padding: 16px; margin-bottom: 12px; }
+    .result-card { background: white; border: 2px solid transparent; box-shadow: 0 1px 4px rgba(0,0,0,0.06); border-radius: 16px; padding: 16px; margin-bottom: 12px; }
     .result-card.truth { background: #F0FDF0; border-color: #58CC02; border-width: 3px; }
     .result-truth-badge { display: inline-block; background: #58CC02; color: white; padding: 2px 8px; border-radius: 8px; font-size: 11px; font-weight: 700; margin-left: 8px; }
     .header { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; margin-bottom: 16px; }
