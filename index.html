@@ -60,7 +60,7 @@
     .logo-text { font-size: 22px; font-weight: 800; color: #58CC02; }
     .username { background: #F7F7F7; padding: 8px 12px; border-radius: 12px; font-weight: 700; color: #777; }
     .signout { background: none; border: none; color: #AFAFAF; cursor: pointer; font-weight: 600; margin-left: 12px; }
-    .back-btn { background: none; border: none; color: #1CB0F6; cursor: pointer; margin-bottom: 16px; font-weight: 700; }
+    .back-btn { background: none; border: none; color: #3C3C3C; cursor: pointer; margin-bottom: 16px; font-weight: 700; }
     .step { display: flex; gap: 12px; color: #777; font-size: 14px; margin-bottom: 12px; }
     .step-num { background: #58CC02; color: white; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; }
     .invite-code { font-family: monospace; background: #F7F7F7; padding: 4px 10px; border-radius: 8px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; }
@@ -650,7 +650,7 @@
               </div>
               <div style="text-align: right;">
                 <div class="lb-points">${s.total_points} pts</div>
-                <div class="lb-stats">${s.fools} 🎭 • ${s.correct_guesses} ✓</div>
+                <div class="lb-stats">${s.fools} <span style="color: #58CC02; font-weight: 800;">;-)</span> • ${s.correct_guesses} ✓</div>
               </div>
             </div>
           `)}
