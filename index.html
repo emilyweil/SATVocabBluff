@@ -5,10 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Vocab Bluff</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text x='50' y='68' font-size='55' text-anchor='middle' font-family='sans-serif'>;-)</text></svg>">
-  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Nunito', sans-serif; background: #F7F7F7; min-height: 100vh; color: #3C3C3C; }
+    body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background: #F7F7F7; min-height: 100vh; color: #3C3C3C; }
     .container { max-width: 500px; margin: 0 auto; padding: 16px; }
     .card { background: white; border-radius: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); padding: 24px; margin-bottom: 16px; }
     .btn { background: #58CC02; color: white; border: none; padding: 14px 24px; border-radius: 16px; font-size: 16px; font-weight: 700; cursor: pointer; width: 100%; text-transform: uppercase; box-shadow: 0 4px 0 #46A302; position: relative; top: 0; }
@@ -39,6 +38,7 @@
     .join-banner-error { background: #FFF0F0; border-color: #FF4B4B; color: #B91C1C; }
     .status-banner { display: block; width: 100%; text-align: center; padding: 12px; border-radius: 12px; font-weight: 800; font-size: 15px; margin-top: 12px; }
     .status-banner.pending { background: #DDF4FF; color: #1CB0F6; }
+    .status-banner.waiting { background: #F3E9FF; color: #8B5CF6; }
     .status-banner.done { background: #F0F0F0; color: #8A8A8A; }
     .invite-link-text { display: inline; background: none; border: none; color: #AFAFAF; font-weight: 400; font-size: 14px; font-family: inherit; cursor: pointer; padding: 0; text-align: left; }
     .invite-link-text:hover { color: #1CB0F6; }
@@ -362,30 +362,36 @@
       };
 
       // For each group, make sure today's challenge exists, then figure out
-      // whether *this* user still has something to do today (plus the streak).
+      // where *this* user stands: still needs to act, is waiting on the rest
+      // of the group, or the whole group has finished (plus the streak).
       const loadTodayStatus = async (gs) => {
         const results = await Promise.all(gs.map(async (group) => {
-          const [{ data: round }, { data: progress }] = await Promise.all([
+          const [{ data: round }, { data: progress }, { data: memberRows }] = await Promise.all([
             supabase.rpc('ensure_daily_challenge', { p_group_id: group.id }),
-            supabase.from('group_progress').select('current_streak, longest_streak').eq('group_id', group.id).maybeSingle()
+            supabase.from('group_progress').select('current_streak, longest_streak').eq('group_id', group.id).maybeSingle(),
+            supabase.from('group_members').select('id').eq('group_id', group.id)
           ]);
           const streakInfo = { current: progress?.current_streak || 0, longest: progress?.longest_streak || 0 };
+          const memberCount = (memberRows || []).length;
 
           if (!round) return { id: group.id, status: null, streak: streakInfo };
 
           if (round.round_type === 'review') {
-            const { data: mine } = await supabase.from('review_completions').select('id').eq('round_id', round.id).eq('user_id', userId).maybeSingle();
-            return { id: group.id, status: { type: 'review', done: !!mine }, streak: streakInfo };
+            const { data: comps } = await supabase.from('review_completions').select('user_id').eq('round_id', round.id);
+            const completions = comps || [];
+            const mine = completions.some(c => c.user_id === userId);
+            const state = (memberCount > 0 && completions.length >= memberCount) ? 'done' : (mine ? 'waiting' : 'action_needed');
+            return { id: group.id, status: { type: 'review', state }, streak: streakInfo };
           }
 
-          // word round
-          if (round.phase === 'results') return { id: group.id, status: { type: 'word', done: true }, streak: streakInfo };
+          // word round: submit -> (waiting) -> vote -> (waiting) -> results (done)
+          if (round.phase === 'results') return { id: group.id, status: { type: 'word', state: 'done' }, streak: streakInfo };
           if (round.phase === 'voting') {
             const { data: mine } = await supabase.from('votes').select('id').eq('round_id', round.id).eq('voter_id', userId).maybeSingle();
-            return { id: group.id, status: { type: 'word', done: !!mine }, streak: streakInfo };
+            return { id: group.id, status: { type: 'word', state: mine ? 'waiting' : 'action_needed' }, streak: streakInfo };
           }
           const { data: mine } = await supabase.from('submissions').select('id').eq('round_id', round.id).eq('user_id', userId).maybeSingle();
-          return { id: group.id, status: { type: 'word', done: !!mine }, streak: streakInfo };
+          return { id: group.id, status: { type: 'word', state: mine ? 'waiting' : 'action_needed' }, streak: streakInfo };
         }));
         setTodayStatus(Object.fromEntries(results.map(r => [r.id, r.status])));
         setStreaks(Object.fromEntries(results.map(r => [r.id, r.streak])));
@@ -441,7 +447,6 @@
         <div>
           <div class="center mb-4">
             <h2 style="font-size: 24px; font-weight: 800;">Your Groups</h2>
-            <p class="text-muted">Play Vocab Bluff with friends</p>
           </div>
           ${joinBanner && html`
             <div class="join-banner ${joinBanner.type === 'error' ? 'join-banner-error' : ''}">
@@ -534,9 +539,11 @@
                 </div>
                 <div style="cursor: pointer;" onClick=${() => onSelectGroup(group)}>
                   ${!status ? html`<span class="status-banner pending">Loading...</span>` :
-                    status.done
-                      ? html`<span class="status-banner done">✅ ${status.type === 'review' ? 'Review done today' : 'Done for today'}</span>`
-                      : html`<span class="status-banner pending">${status.type === 'review' ? '📝 Weekly review due' : '🎯 Word challenge waiting'}</span>`
+                    status.state === 'done'
+                      ? html`<span class="status-banner done">✅ ${status.type === 'review' ? 'Review Done Today' : 'Done for Today'}</span>`
+                    : status.state === 'waiting'
+                      ? html`<span class="status-banner waiting">Waiting on Your Group</span>`
+                      : html`<span class="status-banner pending">${status.type === 'review' ? 'Weekly Review Due' : 'Do Your Daily Word'}</span>`
                   }
                 </div>
               </div>
@@ -606,7 +613,12 @@
           if (mine) return { l: `Waiting (${completions.length}/${members.length})`, c: 'badge-review' };
           return { l: 'Take Test', c: 'badge-review' };
         }
-        if (round.phase === 'voting') return { l: 'Vote', c: 'badge-vote' };
+        if (round.phase === 'voting') {
+          const votes = round.votes || [];
+          const myVoted = votes.some(v => v.voter_id === userId);
+          if (myVoted) return { l: `Waiting (${votes.length}/${members.length})`, c: 'badge-submit' };
+          return { l: 'Vote', c: 'badge-vote' };
+        }
         if (round.phase === 'results') {
           const votes = round.votes || [];
           const submissions = round.submissions || [];
