@@ -23,7 +23,7 @@
     .textarea { min-height: 100px; resize: vertical; }
     .word-display { font-size: 2.5rem; font-weight: 800; color: #58CC02; text-align: center; margin: 16px 0; text-transform: capitalize; }
     .tabs { display: flex; gap: 8px; margin-bottom: 20px; }
-    .tab { flex: 1; padding: 12px; border-radius: 12px; border: 2px solid #E5E5E5; background: white; color: #AFAFAF; cursor: pointer; font-weight: 700; }
+    .tab { flex: 1; padding: 12px; border-radius: 12px; border: 2px solid #E5E5E5; background: white; color: #6B6B6B; cursor: pointer; font-weight: 700; }
     .tab.active { background: #DDF4FF; border-color: #1CB0F6; color: #1CB0F6; }
     .def-card { background: white; border: 2px solid #E5E5E5; border-radius: 16px; padding: 16px; margin-bottom: 12px; cursor: pointer; }
     .def-card:active { border-color: #CECECE; }
@@ -36,9 +36,15 @@
     .lb-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-radius: 12px; margin-bottom: 8px; background: #F7F7F7; }
     .lb-row.me { background: #F0FDF0; border: 2px solid #58CC02; }
     .lb-points { color: #FF9600; font-weight: 800; font-size: 18px; }
-    .lb-stats { color: #AFAFAF; font-size: 12px; }
+    .lb-stats { color: #6B6B6B; font-size: 12px; }
     .round-item { display: flex; justify-content: space-between; align-items: center; padding: 16px; background: white; border: 2px solid #E5E5E5; border-radius: 16px; margin-bottom: 12px; cursor: pointer; }
     .round-item:hover { border-color: #58CC02; }
+    .round-item.solid { background: #58CC02; border-color: #58CC02; color: white; box-shadow: 0 4px 0 #46A302; position: relative; top: 0; }
+    .round-item.solid:hover { border-color: #46A302; }
+    .round-item.solid:active { box-shadow: 0 2px 0 #46A302; top: 2px; }
+    .btn-outline { background: white; color: #3C3C3C; border: 2px solid #E5E5E5; box-shadow: none; text-transform: none; font-size: 1.25rem; padding: 16px; }
+    .btn-outline:hover { border-color: #58CC02; }
+    .btn-outline:active { box-shadow: none; top: 0; }
     .round-word { font-size: 1.25rem; font-weight: 700; text-transform: capitalize; }
     .result-card { background: white; border: 2px solid #E5E5E5; border-radius: 16px; padding: 16px; margin-bottom: 12px; }
     .result-card.truth { background: #F0FDF0; border-color: #58CC02; border-width: 3px; }
@@ -47,10 +53,10 @@
     .logo { display: flex; align-items: center; gap: 8px; }
     .logo-icon { font-size: 22px; font-weight: 800; color: #58CC02; }
     .logo-text { font-size: 22px; font-weight: 800; color: #58CC02; }
-    .username { background: #F7F7F7; padding: 8px 12px; border-radius: 12px; font-weight: 700; color: #777; }
-    .signout { background: none; border: none; color: #AFAFAF; cursor: pointer; font-weight: 600; margin-left: 12px; }
+    .username { background: #F7F7F7; padding: 8px 12px; border-radius: 12px; font-weight: 700; color: #555; }
+    .signout { background: none; border: none; color: #6B6B6B; cursor: pointer; font-weight: 600; margin-left: 12px; }
     .back-btn { background: none; border: none; color: #1CB0F6; cursor: pointer; margin-bottom: 16px; font-weight: 700; }
-    .step { display: flex; gap: 12px; color: #777; font-size: 14px; margin-bottom: 12px; }
+    .step { display: flex; gap: 12px; color: #555; font-size: 14px; margin-bottom: 12px; }
     .step-num { background: #58CC02; color: white; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; }
     .invite-code { font-family: monospace; background: #F7F7F7; padding: 4px 10px; border-radius: 8px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; }
     .truth-notice { background: #F0FDF0; border: 2px solid #58CC02; border-radius: 12px; padding: 12px 16px; margin-top: 12px; display: flex; align-items: center; gap: 8px; }
@@ -59,11 +65,11 @@
     .real-def-label { font-size: 12px; font-weight: 700; color: #B8860B; text-transform: uppercase; margin-bottom: 8px; }
     .review-btn { background: #FFF3E0; color: #FF9600; border: none; padding: 8px 14px; border-radius: 12px; font-weight: 700; cursor: pointer; margin-right: 8px; font-size: 13px; }
     .badge-sm { padding: 4px 10px; font-size: 11px; }
-    .badge-waiting { background: #F0F0F0; color: #AFAFAF; }
+    .badge-waiting { background: #F0F0F0; color: #6B6B6B; }
     .badge-done { background: #F0FDF0; color: #58CC02; }
     .status-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
     .streak { font-size: 13px; font-weight: 800; color: #FF9600; }
-    .streak.none { color: #AFAFAF; font-weight: 700; }
+    .streak.none { color: #6B6B6B; font-weight: 700; }
     .wink-small { color: #000; font-weight: 800; }
     .center { text-align: center; }
     .mb-2 { margin-bottom: 8px; }
@@ -71,14 +77,14 @@
     .mb-4 { margin-bottom: 16px; }
     .mt-3 { margin-top: 12px; }
     .mt-4 { margin-top: 16px; }
-    .text-muted { color: #AFAFAF; }
+    .text-muted { color: #6B6B6B; }
     .text-small { font-size: 14px; }
     .flex { display: flex; }
     .gap-2 { gap: 8px; }
     .flex-1 { flex: 1; }
     .empty-state { text-align: center; padding: 40px 20px; }
     .empty-icon { font-size: 64px; margin-bottom: 16px; }
-    .loading { text-align: center; padding: 60px 20px; font-weight: 700; color: #AFAFAF; }
+    .loading { text-align: center; padding: 60px 20px; font-weight: 700; color: #6B6B6B; }
   </style>
 </head>
 <body>
@@ -328,7 +334,7 @@
               <button class="btn" type="submit" disabled=${loading}>${loading ? 'Loading...' : mode === 'signin' ? 'Sign In' : 'Create Account'}</button>
             </form>
             <div style="margin-top: 24px; padding-top: 20px; border-top: 2px solid #E5E5E5;">
-              <h4 style="color: #AFAFAF; font-size: 12px; text-transform: uppercase; margin-bottom: 16px;">How It Works</h4>
+              <h4 style="color: #6B6B6B; font-size: 12px; text-transform: uppercase; margin-bottom: 16px;">How It Works</h4>
               <div class="step"><span class="step-num">1</span><span>Join a group with friends</span></div>
               <div class="step"><span class="step-num">2</span><span>One person gets the real definition, others make up fakes</span></div>
               <div class="step"><span class="step-num">3</span><span>Vote on which is real</span></div>
@@ -370,7 +376,7 @@
         const { counts, streak } = summary;
         const label = (text, n) => n > 1 ? `${text} ×${n}` : text;
         const badges = [];
-        if (counts.submit) badges.push(html`<span class="badge badge-sm badge-submit">${label('Submit', counts.submit)}</span>`);
+        if (counts.submit) badges.push(html`<span class="badge badge-sm badge-submit">${label(';) define', counts.submit)}</span>`);
         if (counts.vote) badges.push(html`<span class="badge badge-sm badge-vote">${label('Vote', counts.vote)}</span>`);
         if (counts.waiting && !counts.submit && !counts.vote) badges.push(html`<span class="badge badge-sm badge-waiting">Waiting on others</span>`);
         if (badges.length === 0) badges.push(html`<span class="badge badge-sm badge-done">✓ All caught up</span>`);
@@ -530,7 +536,7 @@
         const action = roundAction(round, userId, members.length);
         if (action === 'vote') return { l: 'Vote', c: 'badge-vote' };
         if (action === 'waiting') return { l: 'Waiting', c: 'badge-waiting' };
-        return { l: 'Submit', c: 'badge-submit' };
+        return { l: ';) define', c: 'badge-submit' };
       };
 
       if (loading) return html`<div class="loading">Loading...</div>`;
@@ -541,15 +547,16 @@
             <h2 style="font-size: 28px; font-weight: 800; margin-bottom: 8px;">${group.name}</h2>
             <p class="text-muted mb-2">${members.length} players • Code: <span class="invite-code">${group.invite_code}</span></p>
             <p class="mb-2"><${StreakLabel} streak=${streak} /></p>
-            <p class="text-muted text-small mb-3">A new word arrives every day. Finish it to keep the streak going!</p>
-            <button class="btn" onClick=${startRound} disabled=${creating}>${creating ? 'Adding...' : 'Add a New Word'}</button>
+            <p class="text-muted text-small mb-2">A new word arrives every day. Finish the daily word to keep the streak going.</p>
+            <p class="text-muted text-small mb-3">You can also add additional words.</p>
+            <button class="btn btn-outline" onClick=${startRound} disabled=${creating}>${creating ? 'Adding...' : 'Add a New Word'}</button>
           </div>
 
           <h3 style="font-weight: 700; margin: 24px 0 12px;">Recent Words</h3>
           ${rounds.length === 0 ? html`<div class="card center"><p class="text-muted">No words yet. Add one!</p></div>` : rounds.map(round => {
             const badge = getRoundBadge(round);
             return html`
-              <div class="round-item" onClick=${() => onSelectRound(round)}>
+              <div class="round-item solid" onClick=${() => onSelectRound(round)}>
                 <span class="round-word">${round.words?.word}</span>
                 <span class="badge ${badge.c}">${badge.l}</span>
               </div>
@@ -565,7 +572,7 @@
               </div>
               <div style="text-align: right;">
                 <div class="lb-points">${s.total_points} pts</div>
-                <div class="lb-stats">${s.fools} <span class="wink-small">;-)</span> • ${s.correct_guesses} ✓</div>
+                <div class="lb-stats">${s.fools} <span class="wink-small">;-)</span> • ${s.correct_guesses} <span class="wink-small">✓</span></div>
               </div>
             </div>
           `)}
@@ -679,7 +686,7 @@
               <div class="card">
                 <p class="text-muted mb-2" style="font-weight: 600;">Your fake definition:</p>
                 <p>${mySubmission.definition}</p>
-                <p class="text-muted text-small mt-4">⏳ Waiting for others... (${submissions.length} submitted)</p>
+                <p class="text-muted text-small mt-4">⏳ Waiting for others... (${submissions.length} defined)</p>
                 ${submissions.length >= 2 && html`<button class="btn btn-vote mt-4" onClick=${toVoting}>Start Voting →</button>`}
               </div>
             ` : html`
@@ -687,7 +694,7 @@
                 <p class="mb-3" style="font-weight: 600;">🎭 Make up a fake definition:</p>
                 <p class="text-muted text-small mb-3">Write something that sounds real but isn't! Try to fool your friends.</p>
                 <textarea class="input textarea" value=${definition} onInput=${(e) => setDefinition(e.target.value)} placeholder="Write a convincing fake definition..."></textarea>
-                <button class="btn" onClick=${submitDef} disabled=${submitting || !definition.trim()}>${submitting ? 'Submitting...' : 'Submit'}</button>
+                <button class="btn" onClick=${submitDef} disabled=${submitting || !definition.trim()}>${submitting ? 'Defining...' : ';) define'}</button>
               </div>
             `}
           </div>
@@ -717,7 +724,7 @@
                     style="${opt.oderId === userId ? 'opacity: 0.6; cursor: not-allowed; border-style: dashed;' : ''}"
                   >
                     ${opt.definition}
-                    ${opt.oderId === userId ? html`<p style="font-size: 11px; color: #AFAFAF; margin-top: 8px; font-style: italic;">— Your submission (can't vote for your own)</p>` : ''}
+                    ${opt.oderId === userId ? html`<p style="font-size: 11px; color: #6B6B6B; margin-top: 8px; font-style: italic;">— Your submission (can't vote for your own)</p>` : ''}
                   </div>
                 `)}
                 <button class="btn btn-vote mt-3" onClick=${submitVote} disabled=${submitting || !selected}>${submitting ? 'Voting...' : 'Submit Vote'}</button>
@@ -752,7 +759,7 @@
               return html`
                 <div class="result-card">
                   <p>${sub.definition}</p>
-                  <p style="font-size: 12px; color: #AFAFAF; margin-top: 8px;">— @${sub.profiles?.username}</p>
+                  <p style="font-size: 12px; color: #6B6B6B; margin-top: 8px;">— @${sub.profiles?.username}</p>
                   ${voteCount > 0 && html`
                     <p style="font-size: 13px; color: #FF9600; margin-top: 6px; font-weight: 600;">
                       🎭 Fooled ${voteCount} player${voteCount !== 1 ? 's' : ''} (+${voteCount * 2} pts)
