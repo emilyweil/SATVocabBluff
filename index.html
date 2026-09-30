@@ -84,6 +84,8 @@
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml6YnJ0ZWt0bGRycXJraHNjZHVwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU3NzUyNDksImV4cCI6MjEwMTM1MTI0OX0.ImNYKFVI7qGD9b0J3MwGtzZF9UoWwLAisopFPH3qc8g';
     // ============================================
 
+
+
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     // ============================================
@@ -382,11 +384,9 @@
       useEffect(() => { loadQuestions(); }, []);
 
       const loadQuestions = async () => {
-        // Get all user's groups
         const { data: memberships } = await supabase.from('group_members').select('group_id').eq('user_id', userId);
         if (!memberships || memberships.length === 0) { setLoading(false); return; }
         const groupIds = memberships.map(m => m.group_id);
-        // Get completed rounds from all groups
         const { data: rounds } = await supabase.from('rounds').select('*, words(*)').in('group_id', groupIds).eq('phase', 'results');
         if (!rounds || rounds.length === 0) { setLoading(false); return; }
         const roundIds = rounds.map(r => r.id);
@@ -411,63 +411,63 @@
       };
       const nextQuestion = () => { setSelected(null); setShowAnswer(false); setCurrentIndex(i => i + 1); };
 
-      if (loading) return html\`<div class="loading">Loading review questions...</div>\`;
+      if (loading) return html`<div class="loading">Loading review questions...</div>`;
 
       if (questions.length === 0) {
-        return html\`
+        return html`
           <div class="card center">
             <div style="font-size: 48px; margin-bottom: 16px;">📝</div>
             <h3 style="font-weight: 700; margin-bottom: 8px;">No words to review yet!</h3>
             <p class="text-muted">Complete some rounds first.</p>
-            <button class="btn btn-secondary mt-4" onClick=\${onBack}>← Back</button>
+            <button class="btn btn-secondary mt-4" onClick=${onBack}>← Back</button>
           </div>
-        \`;
+        `;
       }
 
       if (currentIndex >= questions.length) {
         const pct = Math.round((score.correct / score.total) * 100);
-        return html\`
+        return html`
           <div class="card center">
-            <div style="font-size: 48px; margin-bottom: 16px;">\${pct >= 80 ? '🎉' : pct >= 60 ? '👍' : '📚'}</div>
+            <div style="font-size: 48px; margin-bottom: 16px;">${pct >= 80 ? '🎉' : pct >= 60 ? '👍' : '📚'}</div>
             <h2 style="font-weight: 800; margin-bottom: 8px;">Quiz Complete!</h2>
-            <p style="font-size: 24px; font-weight: 700; color: #58CC02;">\${score.correct} / \${score.total}</p>
-            <p class="text-muted">\${pct}% correct</p>
-            <button class="btn mt-4" onClick=\${() => { setCurrentIndex(0); setScore({ correct: 0, total: 0 }); loadQuestions(); }}>🔄 Try Again</button>
-            <button class="btn btn-secondary mt-3" onClick=\${onBack}>← Back</button>
+            <p style="font-size: 24px; font-weight: 700; color: #58CC02;">${score.correct} / ${score.total}</p>
+            <p class="text-muted">${pct}% correct</p>
+            <button class="btn mt-4" onClick=${() => { setCurrentIndex(0); setScore({ correct: 0, total: 0 }); loadQuestions(); }}>🔄 Try Again</button>
+            <button class="btn btn-secondary mt-3" onClick=${onBack}>← Back</button>
           </div>
-        \`;
+        `;
       }
 
       const q = questions[currentIndex];
 
-      return html\`
+      return html`
         <div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 16px;">
-            <span class="text-muted" style="font-weight: 600;">\${currentIndex + 1} / \${questions.length}</span>
-            <span style="font-weight: 700; color: #58CC02;">\${score.correct} correct</span>
+            <span class="text-muted" style="font-weight: 600;">${currentIndex + 1} / ${questions.length}</span>
+            <span style="font-weight: 700; color: #58CC02;">${score.correct} correct</span>
           </div>
           <div class="card center">
             <p class="text-muted mb-2" style="font-weight: 600;">What does this word mean?</p>
-            <div class="word-display">\${q.word}</div>
+            <div class="word-display">${q.word}</div>
           </div>
           <div>
-            \${q.options.map((opt, i) => {
+            ${q.options.map((opt, i) => {
               let style = '';
               if (showAnswer) {
                 if (opt.isCorrect) style = 'border-color: #58CC02; background: #F0FDF0; border-width: 3px;';
                 else if (selected === i) style = 'border-color: #FF4B4B; background: #FFF0F0; border-width: 3px;';
               }
-              return html\`<div class="def-card \${!showAnswer && selected === i ? 'selected' : ''}" style=\${style} onClick=\${() => handleSelect(i)}>\${opt.text}</div>\`;
+              return html`<div class="def-card ${!showAnswer && selected === i ? 'selected' : ''}" style=${style} onClick=${() => handleSelect(i)}>${opt.text}</div>`;
             })}
           </div>
-          \${!showAnswer ? html\`<button class="btn" onClick=\${checkAnswer} disabled=\${selected === null}>Check Answer</button>\` : html\`
+          ${!showAnswer ? html`<button class="btn" onClick=${checkAnswer} disabled=${selected === null}>Check Answer</button>` : html`
             <div>
-              \${q.example && html\`<div class="card" style="background: #FFFBEB; border-color: #FFD93D; margin-bottom: 16px;"><p style="font-size: 13px; font-weight: 600; color: #B8860B; margin-bottom: 4px;">Example:</p><p style="font-style: italic;">"\${q.example}"</p></div>\`}
-              <button class="btn" onClick=\${nextQuestion}>\${currentIndex < questions.length - 1 ? 'Next Question →' : 'See Results'}</button>
+              ${q.example && html`<div class="card" style="background: #FFFBEB; border-color: #FFD93D; margin-bottom: 16px;"><p style="font-size: 13px; font-weight: 600; color: #B8860B; margin-bottom: 4px;">Example:</p><p style="font-style: italic;">"${q.example}"</p></div>`}
+              <button class="btn" onClick=${nextQuestion}>${currentIndex < questions.length - 1 ? 'Next Question →' : 'See Results'}</button>
             </div>
-          \`}
+          `}
         </div>
-      \`;
+      `;
     }
 
     // ============================================
