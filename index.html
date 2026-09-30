@@ -282,7 +282,7 @@
               <span class="logo-text">Vocab Bluff</span>
             </div>
             <div style="display: flex; align-items: center;">
-              <button class="review-btn" onClick=${() => setView('review')}>📝 Review</button>
+              <button class="review-btn" onClick=${() => setView('review')}>Review</button>
               <span class="username">${profile?.username}</span>
               <button class="signout" onClick=${signOut}>Sign out</button>
             </div>
@@ -460,8 +460,8 @@
             <p class="text-muted">Play Vocab Bluff with friends</p>
           </div>
           <div class="flex gap-2 mb-4">
-            <button class="btn btn-small flex-1" onClick=${() => { setShowCreate(true); setShowJoin(false); }}>➕ Create</button>
-            <button class="btn btn-secondary btn-small flex-1" onClick=${() => { setShowJoin(true); setShowCreate(false); }}>🔗 Join</button>
+            <button class="btn btn-small flex-1" onClick=${() => { setShowCreate(true); setShowJoin(false); }}>Create</button>
+            <button class="btn btn-secondary btn-small flex-1" onClick=${() => { setShowJoin(true); setShowCreate(false); }}>Join</button>
           </div>
           ${showCreate && html`
             <form class="card" onSubmit=${createGroup}>
@@ -792,7 +792,7 @@
                     ${opt.oderId === userId ? html`<p style="font-size: 11px; color: #6B6B6B; margin-top: 8px; font-style: italic;">— Your submission (can't vote for your own)</p>` : ''}
                   </div>
                 `)}
-                <button class="btn btn-vote mt-3" onClick=${submitVote} disabled=${submitting || !selected}>${submitting ? 'Voting...' : 'Submit Vote'}</button>
+                <button class="btn btn-vote mt-3" onClick=${submitVote} disabled=${submitting || !selected}>${submitting ? 'Submitting...' : 'Submit'}</button>
               </div>
             `}
           </div>
@@ -916,7 +916,7 @@
             <div style="font-size: 64px; margin-bottom: 16px;">🎉</div>
             <h2 style="font-size: 24px; font-weight: 800; margin-bottom: 8px;">Review Complete!</h2>
             <p class="text-muted mb-4">You scored ${score} out of ${questions.length}</p>
-            <button class="btn" onClick=${loadQuestions}>🔄 Take Again</button>
+            <button class="btn" onClick=${loadQuestions}>Take Again</button>
           </div>
         `;
       }
@@ -948,7 +948,7 @@
             })}
           </div>
           ${selected && html`
-            <button class="btn mt-3" onClick=${nextQuestion}>${currentIndex + 1 < questions.length ? 'Next Word →' : 'See Score →'}</button>
+            <button class="btn mt-3" onClick=${nextQuestion}>${currentIndex + 1 < questions.length ? 'Next Word →' : 'See Score'}</button>
           `}
           <p class="text-muted text-small center mt-3">Score so far: ${score}/${answered}</p>
         </div>
