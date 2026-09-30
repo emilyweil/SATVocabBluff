@@ -158,74 +158,29 @@
       return computeStreak(data || []);
     };
 
-    // Where this user stands on a round: 'define' | 'play' | 'waiting' | 'results'
-    // "Playing" = picking which definition is real. A round only shows 'results' once everyone has played;
-    // anyone who hasn't played yet sees 'play', even if others have already moved on to the results.
+    // What this user needs to do on a round: 'submit' | 'vote' | 'waiting' | 'done'
     const roundAction = (round, userId, memberCount) => {
-      const votes = round.votes || [];
-      if (round.phase === 'voting' || round.phase === 'results') {
-        if (!votes.some(v => v.voter_id === userId)) return 'play';
-        const everyonePlayed = memberCount > 0 && new Set(votes.map(v => v.voter_id)).size >= memberCount;
-        return everyonePlayed ? 'results' : 'waiting';
+      if (round.phase === 'results') return 'done';
+      if (round.phase === 'voting') {
+        return (round.votes || []).some(v => v.voter_id === userId) ? 'waiting' : 'vote';
       }
       const subs = round.submissions || [];
-      if (!subs.some(s => s.user_id === userId)) return 'define';
-      if (memberCount > 0 && subs.length >= memberCount) return 'play';
+      if (!subs.some(s => s.user_id === userId)) return 'submit';
+      if (memberCount > 0 && subs.length >= memberCount) return 'vote';
       return 'waiting';
     };
 
     const loadGroupSummary = async (groupId, userId) => {
       const [streak, open, mem] = await Promise.all([
         loadStreak(groupId),
-        // Same 10 most recent words the group page shows
-        supabase.from('rounds').select('id, phase, submissions(user_id), votes(voter_id)').eq('group_id', groupId).order('created_at', { ascending: false }).limit(10),
+        supabase.from('rounds').select('id, phase, submissions(user_id), votes(voter_id)').eq('group_id', groupId).neq('phase', 'results'),
         supabase.from('group_members').select('user_id').eq('group_id', groupId)
       ]);
       const memberCount = mem.data?.length || 0;
-      const counts = { define: 0, play: 0, waiting: 0 };
+      const counts = { submit: 0, vote: 0, waiting: 0 };
       (open.data || []).forEach(r => { const a = roundAction(r, userId, memberCount); if (a in counts) counts[a]++; });
       return { streak, counts };
     };
-
-    // ============================================
-    // CONFETTI
-    // ============================================
-    const launchConfetti = () => {
-      const canvas = document.createElement('canvas');
-      canvas.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:9999;';
-      document.body.appendChild(canvas);
-      const ctx = canvas.getContext('2d');
-      const dpr = window.devicePixelRatio || 1;
-      const W = window.innerWidth, H = window.innerHeight;
-      canvas.width = W * dpr; canvas.height = H * dpr; ctx.scale(dpr, dpr);
-      const colors = ['#58CC02', '#1CB0F6', '#FF9600', '#CE82FF', '#FF4B4B', '#FFD93D'];
-      const pieces = Array.from({ length: 160 }, () => ({
-        x: W / 2 + (Math.random() - 0.5) * W * 0.3,
-        y: H * 0.35,
-        vx: (Math.random() - 0.5) * 16,
-        vy: -Math.random() * 14 - 4,
-        w: 6 + Math.random() * 6,
-        h: 8 + Math.random() * 8,
-        rot: Math.random() * Math.PI,
-        vr: (Math.random() - 0.5) * 0.3,
-        color: colors[Math.floor(Math.random() * colors.length)]
-      }));
-      const start = performance.now();
-      const frame = (now) => {
-        const t = now - start;
-        ctx.clearRect(0, 0, W, H);
-        ctx.globalAlpha = t > 2200 ? Math.max(0, 1 - (t - 2200) / 800) : 1;
-        for (const p of pieces) {
-          p.vy += 0.35; p.vx *= 0.99; p.x += p.vx; p.y += p.vy; p.rot += p.vr;
-          ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
-          ctx.fillStyle = p.color; ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
-          ctx.restore();
-        }
-        if (t < 3000) requestAnimationFrame(frame); else canvas.remove();
-      };
-      requestAnimationFrame(frame);
-    };
-    const celebratedRounds = new Set(); // confetti once per round per visit
 
     const StreakLabel = ({ streak }) => streak > 0
       ? html`<span class="streak">🔥 ${streak}-day streak</span>`
@@ -421,9 +376,9 @@
         const { counts, streak } = summary;
         const label = (text, n) => n > 1 ? `${text} ×${n}` : text;
         const badges = [];
-        if (counts.define) badges.push(html`<span class="badge badge-sm badge-submit">${label(';) define', counts.define)}</span>`);
-        if (counts.play) badges.push(html`<span class="badge badge-sm badge-vote">${label('Play', counts.play)}</span>`);
-        if (counts.waiting && !counts.define && !counts.play) badges.push(html`<span class="badge badge-sm badge-waiting">Waiting on others</span>`);
+        if (counts.submit) badges.push(html`<span class="badge badge-sm badge-submit">${label(';) define', counts.submit)}</span>`);
+        if (counts.vote) badges.push(html`<span class="badge badge-sm badge-vote">${label('Vote', counts.vote)}</span>`);
+        if (counts.waiting && !counts.submit && !counts.vote) badges.push(html`<span class="badge badge-sm badge-waiting">Waiting on others</span>`);
         if (badges.length === 0) badges.push(html`<span class="badge badge-sm badge-done">✓ All caught up</span>`);
         return html`<div class="status-row">${badges}<${StreakLabel} streak=${streak} /></div>`;
       };
@@ -569,8 +524,7 @@
       };
 
       const getRoundBadge = (round) => {
-        const action = roundAction(round, userId, members.length);
-        if (action === 'results') {
+        if (round.phase === 'results') {
           const votes = round.votes || [];
           const submissions = round.submissions || [];
           const mySubmission = submissions.find(s => s.user_id === userId);
@@ -579,7 +533,8 @@
           const points = correctPoint + foolCount * 2;
           return { l: `Results · +${points} pts`, c: 'badge-results' };
         }
-        if (action === 'play') return { l: 'Play', c: 'badge-vote' };
+        const action = roundAction(round, userId, members.length);
+        if (action === 'vote') return { l: 'Vote', c: 'badge-vote' };
         if (action === 'waiting') return { l: 'Waiting', c: 'badge-waiting' };
         return { l: ';) define', c: 'badge-submit' };
       };
@@ -642,13 +597,6 @@
 
       useEffect(() => { loadRound(); }, [round.id, round.phase]);
 
-      useEffect(() => {
-        if (!loading && round.phase === 'results' && myVote && myVote.submission_id === null && !celebratedRounds.has(round.id)) {
-          celebratedRounds.add(round.id);
-          launchConfetti();
-        }
-      }, [loading, round.phase, myVote]);
-
       const loadRound = async () => {
         const [w, s, v, av] = await Promise.all([
           supabase.from('words').select('*').eq('id', round.word_id).single(),
@@ -697,20 +645,7 @@
         if (!selected) return;
         setSubmitting(true);
         // Store the selected id (could be 'real' or a submission id)
-        const { error } = await supabase.from('votes').insert({ round_id: round.id, voter_id: userId, submission_id: selected === 'real' ? null : selected });
-        // Results were already tallied for this round, so score this late play right away
-        if (!error && round.phase === 'results') {
-          if (selected === 'real') {
-            const { data: sc } = await supabase.from('scores').select('*').eq('group_id', round.group_id).eq('user_id', userId).single();
-            if (sc) await supabase.from('scores').update({ total_points: sc.total_points + 1, correct_guesses: sc.correct_guesses + 1 }).eq('id', sc.id);
-          } else {
-            const sub = submissions.find(x => x.id === selected);
-            if (sub) {
-              const { data: sc } = await supabase.from('scores').select('*').eq('group_id', round.group_id).eq('user_id', sub.user_id).single();
-              if (sc) await supabase.from('scores').update({ total_points: sc.total_points + 2, fools: sc.fools + 1 }).eq('id', sc.id);
-            }
-          }
-        }
+        await supabase.from('votes').insert({ round_id: round.id, voter_id: userId, submission_id: selected === 'real' ? null : selected });
         await loadRound(); setSubmitting(false);
       };
 
@@ -766,7 +701,7 @@
         `;
       }
 
-      if (round.phase === 'voting' || (round.phase === 'results' && !myVote)) {
+      if (round.phase === 'voting') {
         return html`
           <div>
             <div class="card center">
@@ -893,7 +828,7 @@
         if (selected) return;
         setSelected(opt);
         setAnswered(a => a + 1);
-        if (opt.correct) { setScore(sc => sc + 1); launchConfetti(); }
+        if (opt.correct) setScore(sc => sc + 1);
       };
 
       const nextQuestion = () => { setSelected(null); setCurrentIndex(i => i + 1); };
