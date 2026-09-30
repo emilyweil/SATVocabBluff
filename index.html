@@ -42,9 +42,10 @@
     .round-item.solid { background: #58CC02; border-color: #58CC02; color: white; box-shadow: 0 4px 0 #46A302; position: relative; top: 0; }
     .round-item.solid:hover { border-color: #46A302; }
     .round-item.solid:active { box-shadow: 0 2px 0 #46A302; top: 2px; }
-    .btn-outline { background: white; color: #3C3C3C; border: 2px solid #E5E5E5; box-shadow: none; text-transform: none; font-size: 1.25rem; padding: 16px; }
-    .btn-outline:hover { border-color: #58CC02; }
-    .btn-outline:active { box-shadow: none; top: 0; }
+    .btn-quiet { background: transparent; color: #6B6B6B; border: 2px solid #E5E5E5; box-shadow: none; text-transform: none; font-size: 14px; font-weight: 700; padding: 8px 16px; width: auto; }
+    .btn-quiet:hover { border-color: #CECECE; color: #3C3C3C; }
+    .btn-quiet:active { box-shadow: none; top: 0; }
+    .btn-quiet:disabled { background: transparent; box-shadow: none; }
     .round-word { font-size: 1.25rem; font-weight: 700; text-transform: capitalize; }
     .result-card { background: white; border: 2px solid #E5E5E5; border-radius: 16px; padding: 16px; margin-bottom: 12px; }
     .result-card.truth { background: #F0FDF0; border-color: #58CC02; border-width: 3px; }
@@ -588,20 +589,20 @@
 
       return html`
         <div>
-          <div class="card center">
+          <div class="center" style="padding: 8px 0 4px;">
             <h2 style="font-size: 28px; font-weight: 800; margin-bottom: 8px;">${group.name}</h2>
             <p class="text-muted mb-2">${members.length} players • Code: <span class="invite-code">${group.invite_code}</span></p>
             <p class="mb-2"><${StreakLabel} streak=${streak} /></p>
-            <p class="text-muted text-small mb-2">A new word arrives every day. Finish the daily word to keep the streak going.</p>
-            <p class="text-muted text-small mb-3">You can also add additional words.</p>
-            <button class="btn btn-outline" onClick=${startRound} disabled=${creating}>${creating ? 'Adding...' : 'Add a New Word'}</button>
+            <p class="text-muted text-small mb-2">A new word arrives automatically every day. Finish the daily word to keep the streak going.</p>
+            <p class="text-muted text-small mb-3">You can manually add additional words.</p>
+            <button class="btn btn-quiet" onClick=${startRound} disabled=${creating}>${creating ? 'Adding...' : 'Add a New Word'}</button>
           </div>
 
-          <h3 style="font-weight: 700; margin: 24px 0 12px;">Recent Words</h3>
+          <h3 style="font-weight: 700; margin: 24px 0 12px;">Words</h3>
           ${rounds.length === 0 ? html`<div class="card center"><p class="text-muted">No words yet. Add one!</p></div>` : rounds.map(round => {
             const badge = getRoundBadge(round);
             return html`
-              <div class="round-item solid" onClick=${() => onSelectRound(round)}>
+              <div class="round-item ${roundAction(round, userId, members.length) === 'results' ? '' : 'solid'}" onClick=${() => onSelectRound(round)}>
                 <span class="round-word">${round.words?.word}</span>
                 <span class="badge ${badge.c}">${badge.l}</span>
               </div>
@@ -913,7 +914,6 @@
       if (currentIndex >= questions.length) {
         return html`
           <div class="card center">
-            <div style="font-size: 64px; margin-bottom: 16px;">🎉</div>
             <h2 style="font-size: 24px; font-weight: 800; margin-bottom: 8px;">Review Complete!</h2>
             <p class="text-muted mb-4">You scored ${score} out of ${questions.length}</p>
             <button class="btn" onClick=${loadQuestions}>Take Again</button>
