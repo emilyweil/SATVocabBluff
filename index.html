@@ -593,8 +593,7 @@
             <h2 style="font-size: 28px; font-weight: 800; margin-bottom: 8px;">${group.name}</h2>
             <p class="text-muted mb-2">${members.length} players • Code: <span class="invite-code">${group.invite_code}</span></p>
             <p class="mb-2"><${StreakLabel} streak=${streak} /></p>
-            <p class="text-muted text-small mb-2">A new word arrives automatically every day. Finish the daily word to keep the streak going.</p>
-            <p class="text-muted text-small mb-3">You can manually add additional words.</p>
+            <p class="text-muted text-small mb-3">A new word arrives automatically every day. Finish the daily word to keep the streak going. You can manually add additional words.</p>
             <button class="btn btn-quiet" onClick=${startRound} disabled=${creating}>${creating ? 'Adding...' : 'Add a New Word'}</button>
           </div>
 
@@ -640,6 +639,7 @@
       const [loading, setLoading] = useState(true);
       const [submitting, setSubmitting] = useState(false);
       const [shuffledOptions, setShuffledOptions] = useState([]);
+      const [isDaily, setIsDaily] = useState(null);
 
       useEffect(() => { loadRound(); }, [round.id, round.phase]);
 
@@ -651,6 +651,13 @@
       }, [loading, round.phase, myVote]);
 
       const loadRound = async () => {
+        // The group's first word of that day is its daily word; any later ones were added manually.
+        const dayStart = startOfLocalDay(round.created_at);
+        const dayEnd = new Date(dayStart); dayEnd.setDate(dayEnd.getDate() + 1);
+        supabase.from('rounds').select('id').eq('group_id', round.group_id)
+          .gte('created_at', dayStart.toISOString()).lt('created_at', dayEnd.toISOString())
+          .order('created_at', { ascending: true }).limit(1)
+          .then(({ data }) => setIsDaily(!!data && data[0]?.id === round.id));
         const [w, s, v, av] = await Promise.all([
           supabase.from('words').select('*').eq('id', round.word_id).single(),
           supabase.from('submissions').select('*, profiles(*)').eq('round_id', round.id),
@@ -745,7 +752,7 @@
         return html`
           <div>
             <div class="card center">
-              <p class="text-muted mb-2" style="font-weight: 600;">Today's word:</p>
+              <p class="text-muted mb-2" style="font-weight: 600;">${isDaily === null ? 'Word:' : !isDaily ? 'Added word:' : dayKey(round.created_at) === dayKey(new Date()) ? "Today's word:" : 'Daily word:'}</p>
               <div class="word-display">${word?.word}</div>
             </div>
             ${mySubmission ? html`
@@ -757,10 +764,10 @@
               </div>
             ` : html`
               <div class="card">
-                <p class="mb-3" style="font-weight: 600;">🎭 Make up a fake definition:</p>
+                <p class="mb-3" style="font-weight: 600;">Make up a fake definition:</p>
                 <p class="text-muted text-small mb-3">Write something that sounds real but isn't! Try to fool your friends.</p>
                 <textarea class="input textarea" value=${definition} onInput=${(e) => setDefinition(e.target.value)} placeholder="Write a convincing fake definition..."></textarea>
-                <button class="btn" onClick=${submitDef} disabled=${submitting || !definition.trim()}>${submitting ? 'Defining...' : ';) define'}</button>
+                <button class="btn" onClick=${submitDef} disabled=${submitting || !definition.trim()}>${submitting ? 'Submitting...' : 'Submit'}</button>
               </div>
             `}
           </div>
@@ -819,7 +826,7 @@
           </div>
           
           ${submissions.length > 0 && html`
-            <h3 style="font-weight: 700; margin: 24px 0 12px;">🎭 The fakes:</h3>
+            <h3 style="font-weight: 700; margin: 24px 0 12px;">The fakes:</h3>
             ${submissions.map(sub => {
               const voteCount = allVotes.filter(v => v.submission_id === sub.id).length;
               return html`
@@ -828,7 +835,7 @@
                   <p style="font-size: 12px; color: #6B6B6B; margin-top: 8px;">— @${sub.profiles?.username}</p>
                   ${voteCount > 0 && html`
                     <p style="font-size: 13px; color: #FF9600; margin-top: 6px; font-weight: 600;">
-                      🎭 Fooled ${voteCount} player${voteCount !== 1 ? 's' : ''} (+${voteCount * 2} pts)
+                      Fooled ${voteCount} player${voteCount !== 1 ? 's' : ''} (+${voteCount * 2} pts)
                     </p>
                   `}
                 </div>
