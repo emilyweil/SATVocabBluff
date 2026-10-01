@@ -9,7 +9,7 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Nunito', sans-serif; background: #F7F7F7; min-height: 100vh; color: #3C3C3C; }
-    .container { max-width: 500px; margin: 0 auto; padding: 16px; position: relative; z-index: 1; }
+    .container { max-width: 500px; margin: 0 auto; padding: 16px; }
     .card { background: white; border-radius: 16px; border: 2px solid #E5E5E5; padding: 24px; margin-bottom: 16px; }
     .btn { background: #58CC02; color: white; border: none; padding: 14px 24px; border-radius: 16px; font-size: 16px; font-weight: 700; cursor: pointer; width: 100%; text-transform: uppercase; box-shadow: 0 4px 0 #46A302; position: relative; top: 0; }
     .btn:active { box-shadow: 0 2px 0 #46A302; top: 2px; }
@@ -235,205 +235,7 @@
       };
       requestAnimationFrame(frame);
     };
-
-    // ============================================
-    // SHARED, PERSISTENT GROUP CONFETTI
-    // ============================================
-    // Every celebration is saved as a row in `confetti_events`. Each row's confetti layout is generated
-    // from its id, so everyone in the group sees the same pieces in the same places. Pieces burst in,
-    // settle on the background, and fade out slowly. Tune the numbers below to experiment.
-    const CONFETTI = {
-      pieces: { visit: 10, enter: 18, define: 45, correct: 90 },   // pieces per celebration
-      spread: { visit: 0.10, enter: 0.13, define: 0.17, correct: 0.22 }, // how far a burst scatters (fraction of screen)
-      holdHours: 8,      // stays fully bright this long
-      fadeHours: 72,     // gone completely after this long
-      throttleMinutes: 5, // homepage visits / group entries count at most this often (per group)
-      maxPieces: 2500,   // drawing cap, newest pieces win
-      opacity: 0.9,
-      colors: ['#58CC02', '#1CB0F6', '#FF9600', '#CE82FF', '#FF4B4B', '#FFD93D']
-    };
-
-    const Confetti = (() => {
-      const events = new Map();      // id -> { id, group_id, user_id, kind, created_at }
-      const layouts = new Map();     // id -> pieces (cached)
-      const animating = new Set();   // ids currently bursting
-      const lastLogged = new Map();  // throttle keys
-      const pendingOnce = new Set();
-      let visible = new Set();
-      let myUserId = null, bg = null, fx = null, channel = null, bursts = [], rafId = null, W = 0, H = 0;
-
-      const hashStr = (str) => { let h = 2166136261; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
-      const rng = (seed) => () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
-
-      const layoutFor = (ev) => {
-        if (layouts.has(ev.id)) return layouts.get(ev.id);
-        const r = rng(hashStr(String(ev.id)));
-        const gauss = () => { const u = Math.max(r(), 1e-9), v = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
-        const ox = 0.1 + r() * 0.8, oy = 0.12 + r() * 0.76;
-        const spread = CONFETTI.spread[ev.kind] || 0.15;
-        const n = CONFETTI.pieces[ev.kind] || 15;
-        const pieces = [];
-        for (let i = 0; i < n; i++) {
-          pieces.push({
-            x: ox + gauss() * spread, y: oy + gauss() * spread,
-            w: 5 + r() * 5, h: 7 + r() * 7, rot: r() * Math.PI * 2,
-            color: CONFETTI.colors[Math.floor(r() * CONFETTI.colors.length)],
-            delay: r() * 180, dur: 900 + r() * 700, lift: 60 + r() * 180, spin: (r() - 0.5) * 14
-          });
-        }
-        const layout = { ox, oy, pieces };
-        layouts.set(ev.id, layout);
-        return layout;
-      };
-
-      const fadeFor = (ev) => {
-        const hours = (Date.now() - new Date(ev.created_at || Date.now()).getTime()) / 3.6e6;
-        if (hours <= CONFETTI.holdHours) return 1;
-        return Math.max(0, 1 - (hours - CONFETTI.holdHours) / (CONFETTI.fadeHours - CONFETTI.holdHours));
-      };
-
-      const makeCanvas = (z) => {
-        const c = document.createElement('canvas');
-        c.style.cssText = `position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:${z};`;
-        document.body.prepend(c);
-        return c;
-      };
-
-      const sizeCanvases = () => {
-        const dpr = window.devicePixelRatio || 1;
-        W = window.innerWidth; H = window.innerHeight;
-        for (const c of [bg, fx]) { if (!c) continue; c.width = W * dpr; c.height = H * dpr; c.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0); }
-      };
-
-      const drawPiece = (ctx, x, y, p, rot) => {
-        ctx.save(); ctx.translate(x, y); ctx.rotate(rot);
-        ctx.fillStyle = p.color; ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
-        ctx.restore();
-      };
-
-      const drawBg = () => {
-        if (!bg) return;
-        const ctx = bg.getContext('2d');
-        ctx.clearRect(0, 0, W, H);
-        const list = [...events.values()]
-          .filter(ev => visible.has(ev.group_id) && !animating.has(ev.id))
-          .map(ev => ({ ev, a: fadeFor(ev) }))
-          .filter(x => x.a > 0)
-          .sort((a, b) => new Date(b.ev.created_at) - new Date(a.ev.created_at)); // newest first
-        let budget = CONFETTI.maxPieces;
-        const toDraw = [];
-        for (const item of list) { if (budget <= 0) break; toDraw.push(item); budget -= layoutFor(item.ev).pieces.length; }
-        toDraw.reverse(); // paint oldest first so newest sit on top
-        for (const { ev, a } of toDraw) {
-          ctx.globalAlpha = a * CONFETTI.opacity;
-          for (const p of layoutFor(ev).pieces) drawPiece(ctx, p.x * W, p.y * H, p, p.rot);
-        }
-        ctx.globalAlpha = 1;
-      };
-
-      const ease = (t) => 1 - Math.pow(1 - t, 3);
-      const tick = (now) => {
-        const ctx = fx.getContext('2d');
-        ctx.clearRect(0, 0, W, H);
-        bursts = bursts.filter(b => {
-          const t0 = now - b.start;
-          let done = true;
-          for (const p of b.layout.pieces) {
-            const t = Math.min(1, Math.max(0, (t0 - p.delay) / p.dur));
-            if (t < 1) done = false;
-            const e = ease(t);
-            const x = (b.layout.ox + (p.x - b.layout.ox) * e) * W;
-            const y = (b.layout.oy + (p.y - b.layout.oy) * e) * H - Math.sin(Math.PI * t) * p.lift * (1 - t * 0.5);
-            drawPiece(ctx, x, y, p, p.rot + p.spin * (1 - e));
-          }
-          if (done) { animating.delete(b.id); drawBg(); }
-          return !done;
-        });
-        if (bursts.length) rafId = requestAnimationFrame(tick);
-        else { rafId = null; ctx.clearRect(0, 0, W, H); } // burst finished; its pieces now live on the background layer
-      };
-
-      const burst = (ev) => {
-        if (!fx || !visible.has(ev.group_id)) return;
-        animating.add(ev.id);
-        drawBg();
-        bursts.push({ id: ev.id, layout: layoutFor(ev), start: performance.now() });
-        if (!rafId) rafId = requestAnimationFrame(tick);
-      };
-
-      const add = (ev) => { if (!events.has(ev.id)) events.set(ev.id, ev); };
-
-      const load = async (ids) => {
-        if (!ids.length) return;
-        const cutoff = new Date(Date.now() - CONFETTI.fadeHours * 3.6e6).toISOString();
-        const { data, error } = await supabase.from('confetti_events').select('id, group_id, user_id, kind, created_at')
-          .in('group_id', ids).gte('created_at', cutoff).order('created_at', { ascending: false }).limit(1000);
-        if (error) { console.warn('Confetti: could not load (has confetti.sql been run?)', error.message); return; }
-        (data || []).forEach(add);
-        drawBg();
-      };
-
-      return {
-        init(userId) {
-          if (myUserId === userId) return;
-          myUserId = userId;
-          if (!bg) {
-            bg = makeCanvas(0);
-            fx = makeCanvas(9999);
-            sizeCanvases();
-            window.addEventListener('resize', () => { sizeCanvases(); drawBg(); });
-            setInterval(drawBg, 5 * 60 * 1000); // keep fading while the app is open
-          }
-          // Live: see other people's confetti burst in as it happens
-          channel = supabase.channel('confetti-events')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'confetti_events' }, ({ new: ev }) => {
-              if (!ev || ev.user_id === myUserId || events.has(ev.id)) return;
-              add(ev); burst(ev);
-            })
-            .subscribe();
-        },
-        reset() {
-          if (channel) { supabase.removeChannel(channel); channel = null; }
-          myUserId = null; events.clear(); visible = new Set(); bursts = []; animating.clear();
-          if (fx) fx.getContext('2d').clearRect(0, 0, W, H);
-          drawBg();
-        },
-        setScope(groupIds) {
-          visible = new Set(groupIds);
-          drawBg();
-          load(groupIds);
-        },
-        // kind: 'visit' | 'enter' | 'define' | 'correct'
-        async log(groupIds, kind, refId = null, { throttle = false, once = false } = {}) {
-          if (!myUserId) return;
-          let ids = groupIds.filter(Boolean);
-          if (throttle) {
-            ids = ids.filter(g => {
-              const key = `${g}:${kind}`, last = lastLogged.get(key);
-              if (last && Date.now() - last < CONFETTI.throttleMinutes * 60000) return false;
-              lastLogged.set(key, Date.now()); return true;
-            });
-          }
-          if (once) {
-            const key = `${kind}:${refId}`;
-            if (pendingOnce.has(key)) return;
-            pendingOnce.add(key);
-            const { data: existing } = await supabase.from('confetti_events').select('id').eq('user_id', myUserId).eq('kind', kind).eq('ref_id', String(refId)).limit(1);
-            if (existing && existing.length) return;
-          }
-          if (!ids.length) return;
-          const rows = ids.map(g => ({ group_id: g, user_id: myUserId, kind, ref_id: refId == null ? null : String(refId) }));
-          const { data, error } = await supabase.from('confetti_events').insert(rows).select('id, group_id, user_id, kind, created_at');
-          let saved = data;
-          if (error) {
-            console.warn('Confetti: not saved (has confetti.sql been run?)', error.message);
-            // Still celebrate locally for this session
-            saved = rows.map(r => ({ ...r, id: `local-${Math.random()}`, created_at: new Date().toISOString() }));
-          }
-          (saved || []).forEach(ev => { add(ev); burst(ev); });
-        }
-      };
-    })();
+    const celebratedRounds = new Set(); // confetti once per round per visit
 
     const StreakLabel = ({ streak }) => streak > 0
       ? html`<span class="streak">🔥 ${streak}-day streak</span>`
@@ -449,13 +251,6 @@
       const [view, setView] = useState('groups');
       const [activeGroup, setActiveGroup] = useState(null);
       const [activeRound, setActiveRound] = useState(null);
-      const [myGroupIds, setMyGroupIds] = useState([]);
-
-      useEffect(() => { if (user) Confetti.init(user.id); else Confetti.reset(); }, [user?.id]);
-
-      // Which group's confetti fills the background: all your groups on the homepage, just this group inside it
-      const scopeKey = view === 'groups' ? myGroupIds.join(',') : (view === 'group' || view === 'round') ? (activeGroup?.id || '') : '';
-      useEffect(() => { Confetti.setScope(scopeKey ? scopeKey.split(',') : []); }, [scopeKey]);
 
       useEffect(() => {
         checkUser();
@@ -514,7 +309,7 @@
           `}
 
           ${view === 'groups' && html`
-            <${GroupList} userId=${user.id} onGroupsLoaded=${setMyGroupIds} onSelectGroup=${(g) => { setActiveGroup(g); setView('group'); }} />
+            <${GroupList} userId=${user.id} onSelectGroup=${(g) => { setActiveGroup(g); setView('group'); }} />
           `}
 
           ${view === 'review' && html`
@@ -608,7 +403,7 @@
     // ============================================
     // GROUP LIST
     // ============================================
-    function GroupList({ userId, onSelectGroup, onGroupsLoaded }) {
+    function GroupList({ userId, onSelectGroup }) {
       const [groups, setGroups] = useState([]);
       const [loading, setLoading] = useState(true);
       const [showCreate, setShowCreate] = useState(false);
@@ -625,8 +420,6 @@
         const list = data?.map(d => d.groups).filter(Boolean) || [];
         setGroups(list);
         setLoading(false);
-        onGroupsLoaded && onGroupsLoaded(list.map(g => g.id));
-        Confetti.log(list.map(g => g.id), 'visit', null, { throttle: true });
         // Give every group its word for today, then work out what the user needs to do in each.
         await Promise.all(list.map(g => ensureDailyRound(g.id)));
         const entries = await Promise.all(list.map(async g => [g.id, await loadGroupSummary(g.id, userId)]));
@@ -763,7 +556,7 @@
       const [creating, setCreating] = useState(false);
       const [streak, setStreak] = useState(0);
 
-      useEffect(() => { loadData(); Confetti.log([group.id], 'enter', null, { throttle: true }); }, [group.id]);
+      useEffect(() => { loadData(); }, [group.id]);
 
       const loadData = async () => {
         await ensureDailyRound(group.id);
@@ -858,8 +651,9 @@
       useEffect(() => { loadRound(); }, [round.id, round.phase]);
 
       useEffect(() => {
-        if (!loading && round.phase === 'results' && myVote && myVote.submission_id === null) {
-          Confetti.log([round.group_id], 'correct', round.id, { once: true });
+        if (!loading && round.phase === 'results' && myVote && myVote.submission_id === null && !celebratedRounds.has(round.id)) {
+          celebratedRounds.add(round.id);
+          launchConfetti();
         }
       }, [loading, round.phase, myVote]);
 
@@ -908,8 +702,7 @@
 
       const submitDef = async () => {
         setSubmitting(true);
-        const { error } = await supabase.from('submissions').insert({ round_id: round.id, user_id: userId, definition: definition.trim(), is_truth: false });
-        if (!error) Confetti.log([round.group_id], 'define', round.id);
+        await supabase.from('submissions').insert({ round_id: round.id, user_id: userId, definition: definition.trim(), is_truth: false });
         setDefinition(''); await loadRound(); setSubmitting(false);
       };
 
