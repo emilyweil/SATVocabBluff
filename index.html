@@ -224,16 +224,27 @@
       let myUserId = null, bg = null, fx = null, channel = null, bursts = [], rafId = null, W = 0, H = 0;
       let drawn = [];              // what's currently on the background (for raking)
       let rakeEl = null, drawQueued = false;
-      // Raked pieces remember where they were pushed (on this device)
-      const RAKE_KEY = 'vb-confetti-raked';
-      let offsets = {};
-      try { offsets = JSON.parse(localStorage.getItem(RAKE_KEY) || '{}') || {}; } catch (e) { offsets = {}; }
-      const saveOffsets = () => {
-        const keys = Object.keys(offsets);
-        if (keys.length > 20000) keys.slice(0, keys.length - 20000).forEach(k => delete offsets[k]);
-        try { localStorage.setItem(RAKE_KEY, JSON.stringify(offsets)); } catch (e) {}
+      // Raked pieces: "eventId:pieceIndex" -> [x, y] (fractions of the screen). Shared with the whole group via
+      // `confetti_rakes`: each rake stroke saves where it left the pieces it moved; the latest stroke wins.
+      const raked = {};
+      let stroke = null;           // pieces moved during the current drag
+      const posOf = (ev, i, p) => { const o = raked[`${ev.id}:${i}`]; return o ? [o[0] * W, o[1] * H] : [p.x * W, p.y * H]; };
+      const applyMoves = (moves) => { (moves || []).forEach(m => { if (Array.isArray(m) && m.length === 4) raked[`${m[0]}:${m[1]}`] = [m[2], m[3]]; }); };
+      const saveStroke = async () => {
+        if (!stroke || stroke.size === 0) return;
+        const byGroup = {};
+        stroke.forEach((pos, key) => {
+          const cut = key.lastIndexOf(':'), evId = key.slice(0, cut), idx = Number(key.slice(cut + 1));
+          const ev = events.get(evId);
+          if (!ev || String(evId).startsWith('local-')) return;
+          (byGroup[ev.group_id] = byGroup[ev.group_id] || []).push([evId, idx, Math.round(pos[0] * 1e4) / 1e4, Math.round(pos[1] * 1e4) / 1e4]);
+        });
+        stroke = null;
+        const rows = Object.entries(byGroup).map(([group_id, moves]) => ({ group_id, user_id: myUserId, moves }));
+        if (!rows.length) return;
+        const { error } = await supabase.from('confetti_rakes').insert(rows);
+        if (error) console.warn('Confetti: rake not shared (has the latest confetti.sql been run?)', error.message);
       };
-      const posOf = (ev, i, p) => { const o = offsets[`${ev.id}:${i}`]; return [(p.x + (o ? o[0] : 0)) * W, (p.y + (o ? o[1] : 0)) * H]; };
 
       const hashStr = (str) => { let h = 2166136261; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
       const rng = (seed) => () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
@@ -336,9 +347,11 @@
           layoutFor(ev).pieces.forEach((p, i) => {
             const [x, y] = posOf(ev, i, p);
             if (distToSeg(x, y, seg[0] - dx, seg[1] - dy, seg[2] - dx, seg[3] - dy) > reach && distToSeg(x, y, ...seg) > reach) return;
-            const key = `${ev.id}:${i}`, o = offsets[key] || [0, 0];
+            const key = `${ev.id}:${i}`;
             const jitter = () => (Math.random() - 0.5) * 1.5;
-            offsets[key] = [o[0] + (dx * (0.85 + Math.random() * 0.2) + jitter()) / W, o[1] + (dy * (0.85 + Math.random() * 0.2) + jitter()) / H];
+            const next = [(x + dx * (0.85 + Math.random() * 0.2) + jitter()) / W, (y + dy * (0.85 + Math.random() * 0.2) + jitter()) / H];
+            raked[key] = next;
+            if (stroke) stroke.set(key, next);
             changed = true;
           });
         }
@@ -362,6 +375,7 @@
           rakeEl.setPointerCapture(e.pointerId);
           const r = rakeEl.getBoundingClientRect();
           drag = { offX: e.clientX - r.left, offY: e.clientY - r.top, last: rakeTines() };
+          stroke = new Map();
           rakeEl.style.transition = 'none';
           rakeEl.style.cursor = 'grabbing';
         });
@@ -377,7 +391,7 @@
           if (!drag) return;
           drag = null;
           rakeEl.style.cursor = 'grab';
-          saveOffsets();
+          saveStroke();
           parkRake(true); // the rake goes back to its corner
         };
         rakeEl.addEventListener('pointerup', release);
@@ -425,17 +439,22 @@
         if (error) { console.warn('Confetti: could not load (has confetti.sql been run?)', error.message); return; }
         (data || []).forEach(add);
         drawBg();
+        const { data: rakes, error: rakeErr } = await supabase.from('confetti_rakes').select('moves, created_at')
+          .in('group_id', ids).gte('created_at', cutoff).order('created_at', { ascending: true }).limit(2000);
+        if (rakeErr) { console.warn('Confetti: could not load rakes (has the latest confetti.sql been run?)', rakeErr.message); return; }
+        (rakes || []).forEach(r => applyMoves(r.moves));
+        drawBg();
       };
 
       return {
         init(userId) {
           if (myUserId === userId) return;
           myUserId = userId;
-          if (rakeEl) rakeEl.style.display = '';
           if (!bg) {
             bg = makeCanvas(0);
             fx = makeCanvas(9999);
             makeRake();
+            rakeEl.style.display = 'none';
             sizeCanvases();
             window.addEventListener('resize', () => { sizeCanvases(); drawBg(); });
             setInterval(drawBg, 5 * 60 * 1000); // keep fading while the app is open
@@ -446,21 +465,29 @@
               if (!ev || ev.user_id === myUserId || events.has(ev.id)) return;
               add(ev); burst(ev);
             })
+            // Live: see other people's raking
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'confetti_rakes' }, ({ new: rk }) => {
+              if (!rk || rk.user_id === myUserId) return;
+              applyMoves(rk.moves);
+              if (visible.has(rk.group_id)) queueDraw();
+            })
             .subscribe();
         },
         reset() {
           if (channel) { supabase.removeChannel(channel); channel = null; }
           myUserId = null; events.clear(); visible = new Set(); bursts = []; animating.clear();
+          Object.keys(raked).forEach(k => delete raked[k]);
           if (fx) fx.getContext('2d').clearRect(0, 0, W, H);
           if (rakeEl) rakeEl.style.display = 'none';
           drawBg();
         },
         setScope(groupIds) {
           visible = new Set(groupIds);
+          if (rakeEl) rakeEl.style.display = groupIds.length ? '' : 'none';
           drawBg();
           load(groupIds);
         },
-        // kind: 'visit' | 'enter' | 'define' | 'correct' | 'review'
+        // kind: 'define' | 'correct' | 'review'  ('visit' and 'enter' are no longer used)
         async log(groupIds, kind, refId = null, { throttle = false, once = false } = {}) {
           if (!myUserId) return;
           let ids = groupIds.filter(Boolean);
@@ -506,12 +533,11 @@
       const [view, setView] = useState('groups');
       const [activeGroup, setActiveGroup] = useState(null);
       const [activeRound, setActiveRound] = useState(null);
-      const [myGroupIds, setMyGroupIds] = useState([]);
 
       useEffect(() => { if (user) Confetti.init(user.id); else Confetti.reset(); }, [user?.id]);
 
-      // Which group's confetti fills the background: all your groups on the homepage, just this group inside it
-      const scopeKey = (view === 'groups' || view === 'review') ? myGroupIds.join(',') : (view === 'group' || view === 'round') ? (activeGroup?.id || '') : '';
+      // Confetti only shows inside a group, and only that group's confetti
+      const scopeKey = (view === 'group' || view === 'round') ? (activeGroup?.id || '') : '';
       useEffect(() => { Confetti.setScope(scopeKey ? scopeKey.split(',') : []); }, [scopeKey]);
 
       useEffect(() => {
@@ -561,7 +587,7 @@
           </header>
 
           ${view === 'round' && activeRound && html`
-            <button class="back-btn" onClick=${() => setView('group')}>← Back to ${activeGroup?.name}</button>
+            <button class="back-btn" onClick=${() => setView('group')}>Back to ${activeGroup?.name}</button>
             <${GameRound} round=${activeRound} userId=${user.id} onBack=${() => setView('group')} onUpdate=${(r) => setActiveRound(r)} />
           `}
 
@@ -571,7 +597,7 @@
           `}
 
           ${view === 'groups' && html`
-            <${GroupList} userId=${user.id} onGroupsLoaded=${setMyGroupIds} onSelectGroup=${(g) => { setActiveGroup(g); setView('group'); }} />
+            <${GroupList} userId=${user.id} onSelectGroup=${(g) => { setActiveGroup(g); setView('group'); }} />
           `}
 
           ${view === 'review' && html`
@@ -665,7 +691,7 @@
     // ============================================
     // GROUP LIST
     // ============================================
-    function GroupList({ userId, onSelectGroup, onGroupsLoaded }) {
+    function GroupList({ userId, onSelectGroup }) {
       const [groups, setGroups] = useState([]);
       const [loading, setLoading] = useState(true);
       const [showCreate, setShowCreate] = useState(false);
@@ -682,8 +708,6 @@
         const list = data?.map(d => d.groups).filter(Boolean) || [];
         setGroups(list);
         setLoading(false);
-        onGroupsLoaded && onGroupsLoaded(list.map(g => g.id));
-        Confetti.log(list.map(g => g.id), 'visit', null, { throttle: true });
         // Give every group its word for today, then work out what the user needs to do in each.
         await Promise.all(list.map(g => ensureDailyRound(g.id)));
         const entries = await Promise.all(list.map(async g => [g.id, await loadGroupSummary(g.id, userId)]));
@@ -820,7 +844,7 @@
       const [creating, setCreating] = useState(false);
       const [streak, setStreak] = useState(0);
 
-      useEffect(() => { loadData(); Confetti.log([group.id], 'enter', null, { throttle: true }); }, [group.id]);
+      useEffect(() => { loadData(); }, [group.id]);
 
       const loadData = async () => {
         await ensureDailyRound(group.id);
