@@ -406,6 +406,9 @@
         bursts = bursts.filter(b => {
           const t0 = now - b.start;
           let done = true;
+          // Temporary bursts fade out once they've landed
+          ctx.globalAlpha = b.transient && t0 > b.landed ? Math.max(0, 1 - (t0 - b.landed) / 700) : 1;
+          if (b.transient && t0 < b.landed + 700) done = false;
           for (const p of b.layout.pieces) {
             const t = Math.min(1, Math.max(0, (t0 - p.delay) / p.dur));
             if (t < 1) done = false;
@@ -414,7 +417,8 @@
             const y = (b.layout.oy + (p.y - b.layout.oy) * e) * H - Math.sin(Math.PI * t) * p.lift * (1 - t * 0.5);
             drawPiece(ctx, x, y, p, p.rot + p.spin * (1 - e));
           }
-          if (done) { animating.delete(b.id); drawBg(); }
+          ctx.globalAlpha = 1;
+          if (done) { animating.delete(b.id); if (!b.transient) drawBg(); }
           return !done;
         });
         if (bursts.length) rafId = requestAnimationFrame(tick);
@@ -426,6 +430,15 @@
         animating.add(ev.id);
         drawBg();
         bursts.push({ id: ev.id, layout: layoutFor(ev), start: performance.now() });
+        if (!rafId) rafId = requestAnimationFrame(tick);
+      };
+
+      // A burst that isn't saved: plays anywhere, then fades away
+      const flash = (kind) => {
+        if (!fx) return;
+        const layout = layoutFor({ id: `flash-${Math.random()}`, kind });
+        const landed = Math.max(...layout.pieces.map(p => p.delay + p.dur));
+        bursts.push({ id: null, layout, start: performance.now(), transient: true, landed });
         if (!rafId) rafId = requestAnimationFrame(tick);
       };
 
@@ -481,13 +494,14 @@
           if (rakeEl) rakeEl.style.display = 'none';
           drawBg();
         },
+        flash,
         setScope(groupIds) {
           visible = new Set(groupIds);
           if (rakeEl) rakeEl.style.display = groupIds.length ? '' : 'none';
           drawBg();
           load(groupIds);
         },
-        // kind: 'define' | 'correct' | 'review'  ('visit' and 'enter' are no longer used)
+        // kind: 'define' | 'correct'  ('visit', 'enter' and 'review' are no longer saved)
         async log(groupIds, kind, refId = null, { throttle = false, once = false } = {}) {
           if (!myUserId) return;
           let ids = groupIds.filter(Boolean);
@@ -592,7 +606,7 @@
           `}
 
           ${view === 'group' && activeGroup && html`
-            <button class="back-btn" onClick=${() => setView('groups')}>← All Groups</button>
+            <button class="back-btn" onClick=${() => setView('groups')}>All Groups</button>
             <${GroupDetail} group=${activeGroup} userId=${user.id} onSelectRound=${(r) => { setActiveRound(r); setView('round'); }} />
           `}
 
@@ -601,7 +615,7 @@
           `}
 
           ${view === 'review' && html`
-            <button class="back-btn" onClick=${() => setView('groups')}>← All Groups</button>
+            <button class="back-btn" onClick=${() => setView('groups')}>All Groups</button>
             <${ReviewTest} userId=${user.id} />
           `}
         </div>
@@ -652,7 +666,7 @@
               <h2 style="font-size: 24px; font-weight: 800; margin-bottom: 12px;">Check your email!</h2>
               <p style="color: #666; line-height: 1.6;">We sent a confirmation link to <strong>${email}</strong></p>
               <p style="color: #666; line-height: 1.6; margin-top: 8px;">Click the link in the email to activate your account.</p>
-              <button class="btn btn-secondary mt-4" onClick=${() => { setConfirmationSent(false); setMode('signin'); }}>← Back to Sign In</button>
+              <button class="btn btn-secondary mt-4" onClick=${() => { setConfirmationSent(false); setMode('signin'); }}>Back to Sign In</button>
             </div>
           </div>
         `;
@@ -938,12 +952,6 @@
 
       useEffect(() => { loadRound(); }, [round.id, round.phase]);
 
-      useEffect(() => {
-        if (!loading && round.phase === 'results' && myVote && myVote.submission_id === null) {
-          Confetti.log([round.group_id], 'correct', round.id, { once: true });
-        }
-      }, [loading, round.phase, myVote]);
-
       const loadRound = async () => {
         // The group's first word of that day is its daily word; any later ones were added manually.
         const dayStart = startOfLocalDay(round.created_at);
@@ -1001,6 +1009,7 @@
         setSubmitting(true);
         // Store the selected id (could be 'real' or a submission id)
         const { error } = await supabase.from('votes').insert({ round_id: round.id, voter_id: userId, submission_id: selected === 'real' ? null : selected });
+        if (!error && selected === 'real') Confetti.log([round.group_id], 'correct', round.id, { once: true });
         // Results were already tallied for this round, so score this late play right away
         if (!error && round.phase === 'results') {
           if (selected === 'real') {
@@ -1138,7 +1147,7 @@
             })}
           `}
           
-          <button class="btn btn-secondary mt-4" onClick=${onBack}>← Back to Group</button>
+          <button class="btn btn-secondary mt-4" onClick=${onBack}>Back to Group</button>
         </div>
       `;
     }
@@ -1198,8 +1207,7 @@
         setAnswered(a => a + 1);
         if (opt.correct) {
           setScore(sc => sc + 1);
-          const q = questions[currentIndex];
-          if (q) Confetti.log([q.groupId], 'review', q.id);
+          Confetti.flash('review');
         }
       };
 
